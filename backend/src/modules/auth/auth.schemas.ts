@@ -24,8 +24,6 @@ export const googleLoginSchema = z.object({
   deviceName: z.string().max(100).optional(),
 });
 
-export const requestEmailVerificationSchema = z.object({});
-
 export const verifyEmailSchema = z.object({
   token: z.string().min(1, "token is required"),
 });
@@ -43,7 +41,6 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
-export type RequestEmailVerificationInput = z.infer<typeof requestEmailVerificationSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

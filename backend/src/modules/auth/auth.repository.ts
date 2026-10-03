@@ -4,7 +4,7 @@ export interface UserRow {
   id: string;
   email: string;
   email_verified_at: string | null;
-  status: "active" | "suspended" | "deleted";
+  status: "active" | "suspended" | "deleted" | "pending_deletion";
   created_at: string;
   updated_at: string;
 }
@@ -31,16 +31,6 @@ export interface RefreshTokenRow {
   used_at: string | null;
 }
 
-
-export interface AuthTokenRow {
-  id: string;
-  user_id: string;
-  purpose: "email_verification" | "password_reset";
-  token_hash: Buffer;
-  expires_at: string;
-  used_at: string | null;
-}
-
 export interface OauthIdentityRow {
   id: string;
   user_id: string;
@@ -50,7 +40,14 @@ export interface OauthIdentityRow {
   created_at: string;
 }
 
-
+export interface AuthTokenRow {
+  id: string;
+  user_id: string;
+  purpose: "email_verification" | "password_reset";
+  token_hash: Buffer;
+  expires_at: string;
+  used_at: string | null;
+}
 
 export async function createUser(email: string): Promise<UserRow> {
   const result = await pool.query<UserRow>(
@@ -134,6 +131,26 @@ export async function revokeSession(sessionId: string, reason: string): Promise<
   );
 }
 
+export async function revokeAllSessionsForUser(
+  userId: string,
+  exceptSessionId: string | null,
+  reason: string
+): Promise<void> {
+  if (exceptSessionId) {
+    await pool.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = $3
+       WHERE user_id = $1 AND id != $2 AND revoked_at IS NULL`,
+      [userId, exceptSessionId, reason]
+    );
+  } else {
+    await pool.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = $2
+       WHERE user_id = $1 AND revoked_at IS NULL`,
+      [userId, reason]
+    );
+  }
+}
+
 export async function saveRefreshToken(
   sessionId: string,
   tokenHash: Buffer,
@@ -158,20 +175,6 @@ export async function findRefreshTokenByHash(
 
 export async function markRefreshTokenUsed(tokenId: string): Promise<void> {
   await pool.query(`UPDATE refresh_tokens SET used_at = now() WHERE id = $1`, [tokenId]);
-}
-
-export async function recordAuthEvent(
-  userId: string | null,
-  eventType: string,
-  identifier: string | null,
-  ip: string | null,
-  userAgent: string | null
-): Promise<void> {
-  await pool.query(
-    `INSERT INTO auth_events (user_id, event_type, identifier, ip, user_agent)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, eventType, identifier, ip, userAgent]
-  );
 }
 
 export async function findOauthIdentity(
@@ -249,26 +252,6 @@ export async function invalidateAuthTokensForUser(
   );
 }
 
-export async function revokeAllSessionsForUser(
-  userId: string,
-  exceptSessionId: string | null,
-  reason: string
-): Promise<void> {
-  if (exceptSessionId) {
-    await pool.query(
-      `UPDATE sessions SET revoked_at = now(), revoked_reason = $3
-       WHERE user_id = $1 AND id != $2 AND revoked_at IS NULL`,
-      [userId, exceptSessionId, reason]
-    );
-  } else {
-    await pool.query(
-      `UPDATE sessions SET revoked_at = now(), revoked_reason = $2
-       WHERE user_id = $1 AND revoked_at IS NULL`,
-      [userId, reason]
-    );
-  }
-}
-
 export async function countRecentFailedLogins(identifier: string, minutes: number): Promise<number> {
   const result = await pool.query<{ count: string }>(
     `SELECT COUNT(*) FROM auth_events
@@ -276,6 +259,61 @@ export async function countRecentFailedLogins(identifier: string, minutes: numbe
     [identifier, minutes]
   );
   return parseInt(result.rows[0]!.count, 10);
+}
+
+export async function recordAuthEvent(
+  userId: string | null,
+  eventType: string,
+  identifier: string | null,
+  ip: string | null,
+  userAgent: string | null
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO auth_events (user_id, event_type, identifier, ip, user_agent)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, eventType, identifier, ip, userAgent]
+  );
+}
+
+export async function markUserPendingDeletion(userId: string): Promise<void> {
+  await pool.query(`UPDATE users SET status = 'pending_deletion' WHERE id = $1`, [userId]);
+}
+
+export async function findAccountsPastDeletionGracePeriod(graceDays: number): Promise<string[]> {
+  const result = await pool.query<{ id: string }>(
+    `SELECT id FROM users
+     WHERE status = 'pending_deletion'
+       AND updated_at < now() - ($1 || ' days')::interval`,
+    [graceDays]
+  );
+  return result.rows.map((row) => row.id);
+}
+
+export async function deleteUserDataAndAnonymize(userId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    await client.query(`DELETE FROM password_credentials WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM oauth_identities WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM device_tokens WHERE user_id = $1`, [userId]);
+
+    await client.query(
+      `UPDATE users
+       SET email = 'deleted-' || id || '@deleted.oppshunter.local',
+           email_verified_at = NULL,
+           status = 'deleted'
+       WHERE id = $1`,
+      [userId]
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function deleteExpiredAuthData(): Promise<{
@@ -300,6 +338,3 @@ export async function deleteExpiredAuthData(): Promise<{
   };
 }
 
-export async function markUserDeleted(userId: string): Promise<void> {
-  await pool.query(`UPDATE users SET status = 'deleted' WHERE id = $1`, [userId]);
-}

@@ -17,7 +17,8 @@ const envSchema = z.object({
   AI_MODEL: z.string().min(1, "AI_MODEL is required"),
   GEMINI_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
-  MAIL_PROVIDER: z.enum(["console"]).default("console")
+  MAIL_PROVIDER: z.enum(["console"]).default("console"),
+  ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().default(14),
   });
 
 const parsed = envSchema.safeParse(process.env);

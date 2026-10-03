@@ -1,23 +1,25 @@
 import { randomBytes } from "node:crypto";
-import { sendEmail } from "../../lib/mailer/index.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { signAccessToken } from "../../lib/tokens.js";
 import { generateRawRefreshToken, hashRefreshToken } from "../../lib/refreshTokens.js";
 import { verifyGoogleIdToken } from "../../lib/googleAuth.js";
+import { sendEmail } from "../../lib/mailer/index.js";
 import { UnauthorizedError, ConflictError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
 import {
   createUser,
   findUserByEmail,
+  findUserById,
   savePasswordCredential,
   getPasswordHash,
+  updatePasswordHash,
   createSession,
   findActiveSessionById,
   revokeSession,
+  revokeAllSessionsForUser,
   saveRefreshToken,
   findRefreshTokenByHash,
   markRefreshTokenUsed,
-  recordAuthEvent,
   findOauthIdentity,
   createOauthIdentity,
   markEmailVerified,
@@ -25,11 +27,9 @@ import {
   findValidAuthToken,
   markAuthTokenUsed,
   invalidateAuthTokensForUser,
-  updatePasswordHash,
-  revokeAllSessionsForUser,
   countRecentFailedLogins,
-  markUserDeleted,
-  findUserById,
+  markUserPendingDeletion,
+  recordAuthEvent,
 } from "./auth.repository.js";
 
 interface DeviceInfo {
@@ -45,8 +45,8 @@ interface AuthResult {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const HOUR_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const FAILED_LOGIN_WINDOW_MINUTES = 15;
 const FAILED_LOGIN_LOCKOUT_THRESHOLD = 7;
 
@@ -103,7 +103,6 @@ export async function login(
   const user = await findUserByEmail(email);
 
   if (!user) {
-
     await verifyPassword(
       "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       password
@@ -123,7 +122,6 @@ export async function login(
     throw new UnauthorizedError("Too many failed attempts. Try again later.");
   }
 
-
   const passwordHash = await getPasswordHash(user.id);
   const isValid = passwordHash ? await verifyPassword(passwordHash, password) : false;
 
@@ -137,8 +135,58 @@ export async function login(
   return issueSessionTokens(user.id, device);
 }
 
-export async function refresh(rawRefreshToken: string): Promise<AuthResult> {
+export async function loginWithGoogle(
+  idToken: string,
+  device: DeviceInfo
+): Promise<AuthResult> {
+  const googleUser = await verifyGoogleIdToken(idToken);
 
+  const existingIdentity = await findOauthIdentity("google", googleUser.googleUserId);
+
+  if (existingIdentity) {
+    await recordAuthEvent(
+      existingIdentity.user_id,
+      "login_success_google",
+      googleUser.email,
+      device.ip,
+      device.userAgent
+    );
+    return issueSessionTokens(existingIdentity.user_id, device);
+  }
+
+  const existingUser = await findUserByEmail(googleUser.email);
+
+  if (existingUser) {
+    await createOauthIdentity(existingUser.id, "google", googleUser.googleUserId, googleUser.email);
+
+    if (googleUser.emailVerified) {
+      await markEmailVerified(existingUser.id);
+    }
+
+    await recordAuthEvent(
+      existingUser.id,
+      "google_account_linked",
+      googleUser.email,
+      device.ip,
+      device.userAgent
+    );
+
+    return issueSessionTokens(existingUser.id, device);
+  }
+
+  const newUser = await createUser(googleUser.email);
+  await createOauthIdentity(newUser.id, "google", googleUser.googleUserId, googleUser.email);
+
+  if (googleUser.emailVerified) {
+    await markEmailVerified(newUser.id);
+  }
+
+  await recordAuthEvent(newUser.id, "register_google", googleUser.email, device.ip, device.userAgent);
+
+  return issueSessionTokens(newUser.id, device);
+}
+
+export async function refresh(rawRefreshToken: string): Promise<AuthResult> {
   const tokenHash = hashRefreshToken(rawRefreshToken);
   const tokenRow = await findRefreshTokenByHash(tokenHash);
 
@@ -147,7 +195,6 @@ export async function refresh(rawRefreshToken: string): Promise<AuthResult> {
   }
 
   if (tokenRow.used_at) {
-  
     await revokeSession(tokenRow.session_id, "refresh_reuse_detected");
     await recordAuthEvent(null, "refresh_reuse", null, null, null);
     throw new UnauthorizedError("Session revoked");
@@ -174,65 +221,20 @@ export async function refresh(rawRefreshToken: string): Promise<AuthResult> {
   return { userId: session.user_id, accessToken, refreshToken: rawNewRefreshToken };
 }
 
-export async function loginWithGoogle(
-  idToken: string,
-  device: DeviceInfo
-): Promise<AuthResult> {
-  const googleUser = await verifyGoogleIdToken(idToken);
+export async function logout(sessionId: string): Promise<void> {
+  await revokeSession(sessionId, "user_logout");
+}
 
-  const existingIdentity = await findOauthIdentity("google", googleUser.googleUserId);
-
-  if (existingIdentity) {
-    await recordAuthEvent(
-      existingIdentity.user_id,
-      "login_success_google",
-      googleUser.email,
-      device.ip,
-      device.userAgent
-    );
-    return issueSessionTokens(existingIdentity.user_id, device);
-  }
-
-  const existingUser = await findUserByEmail(googleUser.email);
-
-  if (existingUser) {
-
-    await createOauthIdentity(existingUser.id, "google", googleUser.googleUserId, googleUser.email);
-
-    if (googleUser.emailVerified) {
-      await markEmailVerified(existingUser.id);
-    }
-
-    await recordAuthEvent(
-      existingUser.id,
-      "google_account_linked",
-      googleUser.email,
-      device.ip,
-      device.userAgent
-    );
-
-    return issueSessionTokens(existingUser.id, device);
-  }
-
-  
-  const newUser = await createUser(googleUser.email);
-  await createOauthIdentity(newUser.id, "google", googleUser.googleUserId, googleUser.email);
-
-  if (googleUser.emailVerified) {
-    await markEmailVerified(newUser.id);
-  }
-
-  await recordAuthEvent(newUser.id, "register_google", googleUser.email, device.ip, device.userAgent);
-
-  return issueSessionTokens(newUser.id, device);
+export async function logoutAllOtherSessions(userId: string, currentSessionId: string): Promise<void> {
+  await revokeAllSessionsForUser(userId, currentSessionId, "user_logout_all_others");
 }
 
 export async function requestEmailVerification(userId: string, email: string): Promise<void> {
   await invalidateAuthTokensForUser(userId, "email_verification");
 
   const rawToken = generateRawToken();
-  const tokenHash = hashRefreshToken(rawToken); // reusing the same SHA-256 hashing helper
-  const expiresAt = new Date(Date.now() + HOUR_MS);
+  const tokenHash = hashRefreshToken(rawToken);
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS);
 
   await createAuthToken(userId, "email_verification", tokenHash, expiresAt);
 
@@ -240,7 +242,7 @@ export async function requestEmailVerification(userId: string, email: string): P
   await sendEmail(
     email,
     "Verify your OppsHunter email",
-    `Click to verify your email: ${verifyLink}\n\nThis link expires in 1 hour.`
+    `Click to verify your email: ${verifyLink}\n\nThis link expires in 24 hours.`
   );
 }
 
@@ -259,14 +261,13 @@ export async function verifyEmail(rawToken: string): Promise<void> {
 export async function requestPasswordReset(email: string): Promise<void> {
   const user = await findUserByEmail(email);
 
-  // Don't reveal whether the email exists — same enumeration protection as login.
   if (!user) return;
 
   await invalidateAuthTokensForUser(user.id, "password_reset");
 
   const rawToken = generateRawToken();
   const tokenHash = hashRefreshToken(rawToken);
-  const expiresAt = new Date(Date.now() + HOUR_MS);
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
 
   await createAuthToken(user.id, "password_reset", tokenHash, expiresAt);
 
@@ -291,20 +292,10 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
   const newHash = await hashPassword(newPassword);
   await updatePasswordHash(tokenRow.user_id, newHash);
 
-  // Resetting a password is a strong signal to kill every existing session —
-  // if someone else had access, this locks them out immediately.
   await revokeAllSessionsForUser(tokenRow.user_id, null, "password_reset");
 }
 
-export async function logout(sessionId: string): Promise<void> {
-  await revokeSession(sessionId, "user_logout");
-}
-
-export async function logoutAllOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-  await revokeAllSessionsForUser(userId, currentSessionId, "user_logout_all_others");
-}
-
 export async function deleteAccount(userId: string): Promise<void> {
-  await markUserDeleted(userId);
-  await revokeAllSessionsForUser(userId, null, "account_deleted");
+  await markUserPendingDeletion(userId);
+  await revokeAllSessionsForUser(userId, null, "account_deletion_requested");
 }

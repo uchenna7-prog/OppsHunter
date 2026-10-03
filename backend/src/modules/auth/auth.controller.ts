@@ -1,14 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
-import * as authService from "./auth.service.js";
-import { 
-  registerSchema, 
-  loginSchema, 
-  refreshSchema, 
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
   googleLoginSchema,
   verifyEmailSchema,
   requestPasswordResetSchema,
-  resetPasswordSchema, 
+  resetPasswordSchema,
 } from "./auth.schemas.js";
+import * as authService from "./auth.service.js";
 import { findUserById } from "./auth.repository.js";
 import type { AuthenticatedRequest } from "./auth.middleware.js";
 
@@ -52,6 +52,22 @@ export async function loginHandler(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function googleLoginHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = googleLoginSchema.parse(req.body);
+    const device = getDeviceInfo(req, input.deviceName);
+
+    const result = await authService.loginWithGoogle(input.idToken, device);
+
+    res.status(200).json({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function refreshHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const input = refreshSchema.parse(req.body);
@@ -67,17 +83,39 @@ export async function refreshHandler(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function googleLoginHandler(req: Request, res: Response, next: NextFunction) {
+export async function logoutHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const input = googleLoginSchema.parse(req.body);
-    const device = getDeviceInfo(req, input.deviceName);
+    await authService.logout(req.sessionId!);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
 
-    const result = await authService.loginWithGoogle(input.idToken, device);
+export async function logoutAllOtherSessionsHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    await authService.logoutAllOtherSessions(req.userId!, req.sessionId!);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
 
-    res.status(200).json({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    });
+export async function meHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    res.status(200).json({ userId: req.userId, sessionId: req.sessionId });
   } catch (err) {
     next(err);
   }
@@ -112,7 +150,7 @@ export async function requestPasswordResetHandler(req: Request, res: Response, n
   try {
     const input = requestPasswordResetSchema.parse(req.body);
     await authService.requestPasswordReset(input.email);
-    res.status(200).json({ sent: true }); // always 200, even if email doesn't exist
+    res.status(200).json({ sent: true });
   } catch (err) {
     next(err);
   }
@@ -128,33 +166,6 @@ export async function resetPasswordHandler(req: Request, res: Response, next: Ne
   }
 }
 
-export async function logoutHandler(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    await authService.logout(req.sessionId!);
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
-
-
-export async function logoutAllOtherSessionsHandler(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    await authService.logoutAllOtherSessions(req.userId!, req.sessionId!);
-    res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
-
 export async function deleteAccountHandler(
   req: AuthenticatedRequest,
   res: Response,
@@ -163,18 +174,6 @@ export async function deleteAccountHandler(
   try {
     await authService.deleteAccount(req.userId!);
     res.status(204).send();
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function meHandler(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    res.status(200).json({ userId: req.userId, sessionId: req.sessionId });
   } catch (err) {
     next(err);
   }
