@@ -8,6 +8,14 @@ import {
 } from "./profiles.schemas.js";
 import * as profilesService from "./profiles.service.js";
 
+function paramToString(value: string | string[] | undefined): string {
+  const result = Array.isArray(value) ? value[0] : value;
+  if (!result) {
+    throw new Error("Missing route parameter");
+  }
+  return result;
+}
+
 export async function getMyProfileHandler(
   req: AuthenticatedRequest,
   res: Response,
@@ -63,7 +71,7 @@ export async function removeSkillHandler(
   next: NextFunction
 ) {
   try {
-    const skillId = req.params.skillId!;
+    const skillId = paramToString(req.params.skillId);
     await profilesService.removeSkill(req.userId!, skillId);
     res.status(204).send();
   } catch (err) {
@@ -140,7 +148,7 @@ export async function removeCertificationHandler(
   next: NextFunction
 ) {
   try {
-    const certificationId = req.params.certificationId!;
+    const certificationId = paramToString(req.params.certificationId);
     await profilesService.removeMyCertification(req.userId!, certificationId);
     res.status(204).send();
   } catch (err) {

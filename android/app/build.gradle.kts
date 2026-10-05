@@ -44,27 +44,14 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-
-    // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-    // Secure token storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-
-    // Navigation between screens
     implementation("androidx.navigation:navigation-compose:2.8.4")
-
-    // ViewModel + Compose integration
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-
-    // Coroutines (async code)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-
-    // DataStore (small local preferences, used alongside secure storage)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

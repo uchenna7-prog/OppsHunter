@@ -35,8 +35,7 @@ class AuthRepository(
         try {
             api.logout()
         } catch (e: Exception) {
-            // Even if the network call fails, we still clear local tokens below —
-            // the user should always be able to log out locally regardless of connectivity.
+
         }
         tokenStore.clearTokens()
     }
