@@ -3,17 +3,25 @@ import { env } from "../config/env.js";
 
 const ALG = "EdDSA";
 
+function normalizePem(value: string): string {
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "");
+}
+
 async function getPrivateKey() {
-  return importPKCS8(env.JWT_PRIVATE_KEY, ALG);
+  return importPKCS8(normalizePem(env.JWT_PRIVATE_KEY), ALG);
 }
 
 async function getPublicKey() {
-  return importSPKI(env.JWT_PUBLIC_KEY, ALG);
+  return importSPKI(normalizePem(env.JWT_PUBLIC_KEY), ALG);
 }
 
 export interface AccessTokenPayload {
-  sub: string; 
-  sid: string; 
+  sub: string;
+  sid: string;
 }
 
 export async function signAccessToken(payload: AccessTokenPayload): Promise<string> {
@@ -29,7 +37,6 @@ export async function signAccessToken(payload: AccessTokenPayload): Promise<stri
 }
 
 export async function verifyAccessToken(token: string): Promise<AccessTokenPayload> {
-  
   const publicKey = await getPublicKey();
 
   const { payload } = await jwtVerify(token, publicKey, {
