@@ -12,14 +12,14 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(30),
   SESSION_MAX_LIFETIME_DAYS: z.coerce.number().default(90),
-  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().min(1, "FIREBASE_SERVICE_ACCOUNT_PATH is required"),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().min(1, "FIREBASE_SERVICE_ACCOUNT_JSON is required"),
   AI_PROVIDER: z.enum(["gemini", "openrouter"]).default("gemini"),
   AI_MODEL: z.string().min(1, "AI_MODEL is required"),
   GEMINI_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   MAIL_PROVIDER: z.enum(["console"]).default("console"),
   ACCOUNT_DELETION_GRACE_DAYS: z.coerce.number().default(14),
-  });
+});
 
 const parsed = envSchema.safeParse(process.env);
 
