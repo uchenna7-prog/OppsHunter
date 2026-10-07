@@ -20,4 +20,16 @@ interface AuthApi {
 
     @POST("auth/logout")
     suspend fun logout(): Response<Unit>
+
+    @POST("auth/verify-email/request")
+    suspend fun requestEmailVerification(): Response<Unit>
+
+    @POST("auth/verify-email")
+    suspend fun verifyEmail(@Body request: VerifyEmailRequest): Response<Unit>
+
+    @POST("auth/password-reset/request")
+    suspend fun requestPasswordReset(@Body request: PasswordResetRequest): Response<Unit>
+
+    @POST("auth/password-reset")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<Unit>
 }

@@ -30,28 +30,22 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun register(email: String, password: String) {
         _state.value = AuthScreenState(isLoading = true)
-
         viewModelScope.launch {
-            val result = repository.register(email, password, deviceName = android.os.Build.MODEL)
-            handleResult(result)
+            handleResult(repository.register(email.trim(), password, deviceName = android.os.Build.MODEL))
         }
     }
 
     fun login(email: String, password: String) {
         _state.value = AuthScreenState(isLoading = true)
-
         viewModelScope.launch {
-            val result = repository.login(email, password, deviceName = android.os.Build.MODEL)
-            handleResult(result)
+            handleResult(repository.login(email.trim(), password, deviceName = android.os.Build.MODEL))
         }
     }
 
     fun loginWithGoogle(idToken: String) {
         _state.value = AuthScreenState(isLoading = true)
-
         viewModelScope.launch {
-            val result = repository.loginWithGoogle(idToken, deviceName = android.os.Build.MODEL)
-            handleResult(result)
+            handleResult(repository.loginWithGoogle(idToken, deviceName = android.os.Build.MODEL))
         }
     }
 
@@ -61,14 +55,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun showError(message: String) {
+        _state.value = AuthScreenState(isLoading = false, errorMessage = message)
+    }
+
     fun clearError() {
         _state.value = _state.value.copy(errorMessage = null)
     }
 
     private fun handleResult(result: AuthResult) {
         _state.value = when (result) {
-            is AuthResult.Success -> AuthScreenState(isLoading = false, errorMessage = null)
-            is AuthResult.Failure -> AuthScreenState(isLoading = false, errorMessage = result.message)
+            is AuthResult.Success -> AuthScreenState()
+            is AuthResult.Failure -> AuthScreenState(errorMessage = result.message)
         }
     }
 }

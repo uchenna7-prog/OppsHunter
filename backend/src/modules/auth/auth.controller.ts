@@ -136,10 +136,14 @@ export async function requestEmailVerificationHandler(
   }
 }
 
-export async function verifyEmailHandler(req: Request, res: Response, next: NextFunction) {
+export async function verifyEmailHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   try {
     const input = verifyEmailSchema.parse(req.body);
-    await authService.verifyEmail(input.token);
+    await authService.verifyEmail(req.userId!, input.code, getDeviceInfo(req));
     res.status(200).json({ verified: true });
   } catch (err) {
     next(err);
@@ -159,7 +163,12 @@ export async function requestPasswordResetHandler(req: Request, res: Response, n
 export async function resetPasswordHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const input = resetPasswordSchema.parse(req.body);
-    await authService.resetPassword(input.token, input.newPassword);
+    await authService.resetPassword(
+      input.email,
+      input.code,
+      input.newPassword,
+      getDeviceInfo(req)
+    );
     res.status(200).json({ reset: true });
   } catch (err) {
     next(err);

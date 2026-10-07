@@ -94,7 +94,10 @@ export async function getPasswordHash(userId: string): Promise<string | null> {
 
 export async function updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
   await pool.query(
-    `UPDATE password_credentials SET password_hash = $2, updated_at = now() WHERE user_id = $1`,
+    `INSERT INTO password_credentials (user_id, password_hash)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id) DO UPDATE
+     SET password_hash = EXCLUDED.password_hash, updated_at = now()`,
     [userId, passwordHash]
   );
 }
@@ -219,6 +222,8 @@ export async function createAuthToken(
   const result = await pool.query<AuthTokenRow>(
     `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
      VALUES ($1, $2, $3, $4)
+     ON CONFLICT (token_hash) DO UPDATE
+     SET expires_at = EXCLUDED.expires_at, used_at = NULL, created_at = now()
      RETURNING *`,
     [userId, purpose, tokenHash, expiresAt]
   );
@@ -257,6 +262,19 @@ export async function countRecentFailedLogins(identifier: string, minutes: numbe
     `SELECT COUNT(*) FROM auth_events
      WHERE identifier = $1 AND event_type = 'login_failed' AND created_at > now() - ($2 || ' minutes')::interval`,
     [identifier, minutes]
+  );
+  return parseInt(result.rows[0]!.count, 10);
+}
+
+export async function countRecentAuthEvents(
+  identifier: string,
+  eventType: string,
+  minutes: number
+): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) FROM auth_events
+     WHERE identifier = $1 AND event_type = $2 AND created_at > now() - ($3 || ' minutes')::interval`,
+    [identifier, eventType, minutes]
   );
   return parseInt(result.rows[0]!.count, 10);
 }
@@ -337,4 +355,3 @@ export async function deleteExpiredAuthData(): Promise<{
     sessions: sessionsResult.rowCount ?? 0,
   };
 }
-

@@ -48,3 +48,4 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
     sid: payload.sid as string,
   };
 }
+

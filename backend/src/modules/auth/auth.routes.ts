@@ -48,7 +48,7 @@ const refreshLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
-const resetLimiter = rateLimit({
+const resetRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
   standardHeaders: true,
@@ -56,9 +56,17 @@ const resetLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
-const verificationLimiter = rateLimit({
+const resetConfirmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
+const verificationRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 3,
+  limit: 6,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
@@ -72,8 +80,13 @@ authRouter.post("/logout", authenticate, logoutHandler);
 authRouter.post("/logout-all-others", authenticate, logoutAllOtherSessionsHandler);
 authRouter.get("/me", authenticate, meHandler);
 
-authRouter.post("/verify-email/request", authenticate, verificationLimiter, requestEmailVerificationHandler);
-authRouter.post("/verify-email", verifyEmailHandler);
-authRouter.post("/password-reset/request", resetLimiter, requestPasswordResetHandler);
-authRouter.post("/password-reset", resetLimiter, resetPasswordHandler);
+authRouter.post(
+  "/verify-email/request",
+  authenticate,
+  verificationRequestLimiter,
+  requestEmailVerificationHandler
+);
+authRouter.post("/verify-email", authenticate, verifyEmailHandler);
+authRouter.post("/password-reset/request", resetRequestLimiter, requestPasswordResetHandler);
+authRouter.post("/password-reset", resetConfirmLimiter, resetPasswordHandler);
 authRouter.delete("/me", authenticate, deleteAccountHandler);

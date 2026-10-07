@@ -1,15 +1,14 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { signAccessToken } from "../../lib/tokens.js";
 import { generateRawRefreshToken, hashRefreshToken } from "../../lib/refreshTokens.js";
 import { verifyGoogleIdToken } from "../../lib/googleAuth.js";
 import { sendEmail } from "../../lib/mailer/index.js";
-import { UnauthorizedError, ConflictError } from "../../lib/errors.js";
+import { UnauthorizedError, ConflictError, TooManyRequestsError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
 import {
   createUser,
   findUserByEmail,
-  findUserById,
   savePasswordCredential,
   getPasswordHash,
   updatePasswordHash,
@@ -28,6 +27,7 @@ import {
   markAuthTokenUsed,
   invalidateAuthTokensForUser,
   countRecentFailedLogins,
+  countRecentAuthEvents,
   markUserPendingDeletion,
   recordAuthEvent,
 } from "./auth.repository.js";
@@ -44,14 +44,21 @@ interface AuthResult {
   refreshToken: string;
 }
 
+type CodePurpose = "email_verification" | "password_reset";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
-const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CODE_TTL_MS = 15 * 60 * 1000;
+const CODE_ATTEMPT_WINDOW_MINUTES = 15;
+const CODE_MAX_ATTEMPTS = 5;
 const FAILED_LOGIN_WINDOW_MINUTES = 15;
 const FAILED_LOGIN_LOCKOUT_THRESHOLD = 7;
 
-function generateRawToken(): string {
-  return randomBytes(32).toString("base64url");
+function generateCode(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, "0");
+}
+
+function hashCode(userId: string, purpose: CodePurpose, code: string): Buffer {
+  return createHash("sha256").update(`${userId}:${purpose}:${code}`).digest();
 }
 
 async function issueSessionTokens(userId: string, device: DeviceInfo): Promise<AuthResult> {
@@ -232,30 +239,46 @@ export async function logoutAllOtherSessions(userId: string, currentSessionId: s
 export async function requestEmailVerification(userId: string, email: string): Promise<void> {
   await invalidateAuthTokensForUser(userId, "email_verification");
 
-  const rawToken = generateRawToken();
-  const tokenHash = hashRefreshToken(rawToken);
-  const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS);
+  const code = generateCode();
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+  await createAuthToken(
+    userId,
+    "email_verification",
+    hashCode(userId, "email_verification", code),
+    expiresAt
+  );
 
-  await createAuthToken(userId, "email_verification", tokenHash, expiresAt);
-
-  const verifyLink = `https://oppshunter.app/verify-email?token=${rawToken}`;
   await sendEmail(
     email,
-    "Verify your OppsHunter email",
-    `Click to verify your email: ${verifyLink}\n\nThis link expires in 24 hours.`
+    "Your OppsHunter verification code",
+    `Your verification code is ${code}\n\nIt expires in 15 minutes. If you didn't create an account, ignore this email.`
   );
 }
 
-export async function verifyEmail(rawToken: string): Promise<void> {
-  const tokenHash = hashRefreshToken(rawToken);
-  const tokenRow = await findValidAuthToken(tokenHash, "email_verification");
+export async function verifyEmail(userId: string, code: string, device: DeviceInfo): Promise<void> {
+  const identifier = `verify:${userId}`;
+
+  const failures = await countRecentAuthEvents(
+    identifier,
+    "verify_email_failed",
+    CODE_ATTEMPT_WINDOW_MINUTES
+  );
+  if (failures >= CODE_MAX_ATTEMPTS) {
+    throw new TooManyRequestsError("Too many incorrect attempts. Try again in 15 minutes.");
+  }
+
+  const tokenRow = await findValidAuthToken(
+    hashCode(userId, "email_verification", code),
+    "email_verification"
+  );
 
   if (!tokenRow) {
-    throw new UnauthorizedError("Invalid or expired verification link");
+    await recordAuthEvent(userId, "verify_email_failed", identifier, device.ip, device.userAgent);
+    throw new UnauthorizedError("Invalid or expired code");
   }
 
   await markAuthTokenUsed(tokenRow.id);
-  await markEmailVerified(tokenRow.user_id);
+  await markEmailVerified(userId);
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -265,34 +288,56 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
   await invalidateAuthTokensForUser(user.id, "password_reset");
 
-  const rawToken = generateRawToken();
-  const tokenHash = hashRefreshToken(rawToken);
-  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+  const code = generateCode();
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+  await createAuthToken(user.id, "password_reset", hashCode(user.id, "password_reset", code), expiresAt);
 
-  await createAuthToken(user.id, "password_reset", tokenHash, expiresAt);
-
-  const resetLink = `https://oppshunter.app/reset-password?token=${rawToken}`;
   await sendEmail(
     email,
-    "Reset your OppsHunter password",
-    `Click to reset your password: ${resetLink}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.`
+    "Your OppsHunter password reset code",
+    `Your password reset code is ${code}\n\nIt expires in 15 minutes. If you didn't request this, ignore this email.`
   );
 }
 
-export async function resetPassword(rawToken: string, newPassword: string): Promise<void> {
-  const tokenHash = hashRefreshToken(rawToken);
-  const tokenRow = await findValidAuthToken(tokenHash, "password_reset");
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+  device: DeviceInfo
+): Promise<void> {
+  const identifier = `reset:${email}`;
 
-  if (!tokenRow) {
-    throw new UnauthorizedError("Invalid or expired reset link");
+  const failures = await countRecentAuthEvents(
+    identifier,
+    "password_reset_failed",
+    CODE_ATTEMPT_WINDOW_MINUTES
+  );
+  if (failures >= CODE_MAX_ATTEMPTS) {
+    throw new TooManyRequestsError("Too many incorrect attempts. Try again in 15 minutes.");
+  }
+
+  const user = await findUserByEmail(email);
+  const tokenRow = user
+    ? await findValidAuthToken(hashCode(user.id, "password_reset", code), "password_reset")
+    : null;
+
+  if (!user || !tokenRow) {
+    await recordAuthEvent(
+      user?.id ?? null,
+      "password_reset_failed",
+      identifier,
+      device.ip,
+      device.userAgent
+    );
+    throw new UnauthorizedError("Invalid or expired code");
   }
 
   await markAuthTokenUsed(tokenRow.id);
 
   const newHash = await hashPassword(newPassword);
-  await updatePasswordHash(tokenRow.user_id, newHash);
+  await updatePasswordHash(user.id, newHash);
 
-  await revokeAllSessionsForUser(tokenRow.user_id, null, "password_reset");
+  await revokeAllSessionsForUser(user.id, null, "password_reset");
 }
 
 export async function deleteAccount(userId: string): Promise<void> {

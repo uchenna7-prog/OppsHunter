@@ -34,3 +34,16 @@ data class ApiErrorDetail(
     val code: String,
     val message: String
 )
+data class VerifyEmailRequest(
+    val code: String
+)
+
+data class PasswordResetRequest(
+    val email: String
+)
+
+data class ResetPasswordRequest(
+    val email: String,
+    val code: String,
+    val newPassword: String
+)

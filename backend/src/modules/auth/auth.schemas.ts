@@ -1,16 +1,24 @@
 import { z } from "zod";
 
+const emailRule = z.string().trim().toLowerCase().email("Invalid email address");
+
+const passwordRule = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(72, "Password must be at most 72 characters")
+  .regex(/[A-Za-z]/, "Password must contain a letter")
+  .regex(/\d/, "Password must contain a number");
+
+const codeRule = z.string().regex(/^\d{6}$/, "Code must be 6 digits");
+
 export const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(72, "Password must be at most 72 characters"),
+  email: emailRule,
+  password: passwordRule,
   deviceName: z.string().max(100).optional(),
 });
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: emailRule,
   password: z.string().min(1, "Password is required"),
   deviceName: z.string().max(100).optional(),
 });
@@ -25,16 +33,17 @@ export const googleLoginSchema = z.object({
 });
 
 export const verifyEmailSchema = z.object({
-  token: z.string().min(1, "token is required"),
+  code: codeRule,
 });
 
 export const requestPasswordResetSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: emailRule,
 });
 
 export const resetPasswordSchema = z.object({
-  token: z.string().min(1, "token is required"),
-  newPassword: z.string().min(8).max(72),
+  email: emailRule,
+  code: codeRule,
+  newPassword: passwordRule,
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

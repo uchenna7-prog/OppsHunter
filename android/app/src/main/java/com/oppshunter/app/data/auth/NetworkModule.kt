@@ -12,13 +12,14 @@ object NetworkModule {
     private const val BASE_URL = "http://localhost:3000/"
 
     fun create(context: Context): AuthApi {
+
         val tokenStore = TokenStore(context)
 
         val authInterceptor = Interceptor { chain ->
-            val original = chain.request()
+            val originalRequest = chain.request()
             val accessToken = tokenStore.getAccessTokenBlocking()
 
-            val requestBuilder = original.newBuilder()
+            val requestBuilder = originalRequest.newBuilder()
             if (!accessToken.isNullOrBlank()) {
                 requestBuilder.addHeader("Authorization", "Bearer $accessToken")
             }

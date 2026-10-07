@@ -1,35 +1,36 @@
 package com.oppshunter.app.ui.auth
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.oppshunter.app.ui.auth.components.AuthBackground
+import com.oppshunter.app.ui.auth.components.AuthTextField
+import com.oppshunter.app.ui.auth.components.ErrorText
+import com.oppshunter.app.ui.auth.components.PrimaryButton
+import com.oppshunter.app.ui.auth.components.SwitchAuthRow
+import com.oppshunter.app.ui.auth.components.TermsFooter
+import com.oppshunter.app.ui.theme.TextPrimary
+import com.oppshunter.app.ui.theme.TextSecondary
 
 @Composable
 fun RegisterScreen(
     viewModel: AuthViewModel = viewModel(),
-    onRegisterSuccess: () -> Unit,
+    onRegisterSuccess: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
@@ -38,89 +39,112 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var formError by remember { mutableStateOf<String?>(null) }
 
-    if (isLoggedIn) {
-        onRegisterSuccess()
-        return
-    }
+    val passwordsMismatch = confirmPassword.isNotEmpty() && password != confirmPassword
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
+    LaunchedEffect(Unit) { viewModel.clearError() }
+    LaunchedEffect(isLoggedIn) { if (isLoggedIn) onRegisterSuccess(email.trim()) }
+
+    AuthBackground {
+        Spacer(modifier = Modifier.height(72.dp))
+
         Text(
             text = "Create your account",
-            style = MaterialTheme.typography.headlineMedium
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.displaySmall,
+            color = TextPrimary,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.padding(top = 24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
+        Text(
+            text = "Let your AI agent do the job hunting",
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        AuthTextField(
+            label = "Email",
             value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth()
+            onValueChange = {
+                email = it
+                formError = null
+            },
+            placeholder = "Enter your email",
+            keyboardType = KeyboardType.Email
         )
 
-        Spacer(modifier = Modifier.padding(top = 12.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        OutlinedTextField(
+        AuthTextField(
+            label = "Password",
             value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth()
+            onValueChange = {
+                password = it
+                formError = null
+            },
+            placeholder = "Letters & numbers, 8+ characters",
+            isPassword = true
         )
 
-        Spacer(modifier = Modifier.padding(top = 12.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        OutlinedTextField(
+        AuthTextField(
+            label = "Confirm password",
             value = confirmPassword,
-            onValueChange = { confirmPassword = it },
-            label = { Text("Confirm password") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth()
+            onValueChange = {
+                confirmPassword = it
+                formError = null
+            },
+            placeholder = "Re-enter your password",
+            imeAction = ImeAction.Done,
+            isPassword = true
         )
 
-        val passwordsMismatch = confirmPassword.isNotEmpty() && password != confirmPassword
-
-        if (passwordsMismatch) {
-            Spacer(modifier = Modifier.padding(top = 8.dp))
-            Text(
-                text = "Passwords don't match",
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        if (state.errorMessage != null) {
-            Spacer(modifier = Modifier.padding(top = 8.dp))
-            Text(
-                text = state.errorMessage ?: "",
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        Spacer(modifier = Modifier.padding(top = 24.dp))
-
-        if (state.isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-        } else {
-            Button(
-                onClick = { viewModel.register(email, password) },
-                enabled = email.isNotBlank() && password.isNotBlank() && !passwordsMismatch,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Register")
+        ErrorText(
+            message = when {
+                passwordsMismatch -> "Passwords don't match"
+                formError != null -> formError
+                else -> state.errorMessage
             }
-        }
+        )
 
-        TextButton(onClick = onNavigateToLogin) {
-            Text("Already have an account? Log in")
-        }
+        Spacer(modifier = Modifier.height(32.dp))
+
+        PrimaryButton(
+            text = "Sign up",
+            isLoading = state.isLoading,
+            enabled = email.isNotBlank() &&
+                    password.isNotBlank() &&
+                    confirmPassword.isNotBlank() &&
+                    !passwordsMismatch,
+            onClick = {
+                formError = if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+                    "Enter a valid email address"
+                } else {
+                    PasswordRules.validate(password)
+                }
+
+                if (formError == null) viewModel.register(email, password)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SwitchAuthRow(
+            prompt = "Already have an account?",
+            action = "Sign in",
+            onClick = onNavigateToLogin
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        TermsFooter()
     }
 }
