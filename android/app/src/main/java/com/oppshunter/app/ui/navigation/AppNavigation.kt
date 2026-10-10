@@ -1,46 +1,47 @@
 package com.oppshunter.app.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.oppshunter.app.ui.auth.AuthViewModel
-import com.oppshunter.app.ui.auth.ForgotPasswordScreen
-import com.oppshunter.app.ui.auth.LoginScreen
-import com.oppshunter.app.ui.auth.OnboardingPrefs
-import com.oppshunter.app.ui.auth.OnboardingScreen
-import com.oppshunter.app.ui.auth.ProfileSetupScreen
-import com.oppshunter.app.ui.auth.RecoveryViewModel
-import com.oppshunter.app.ui.auth.RegisterScreen
-import com.oppshunter.app.ui.auth.ResetPasswordScreen
-import com.oppshunter.app.ui.auth.SplashScreen
-import com.oppshunter.app.ui.auth.VerifyEmailScreen
-import com.oppshunter.app.ui.auth.WelcomeScreen
+import com.oppshunter.app.features.auth.ui.AuthViewModel
+import com.oppshunter.app.features.auth.ui.ForgotPasswordScreen
+import com.oppshunter.app.features.auth.ui.LoginScreen
+import com.oppshunter.app.features.auth.ui.ProfileSetupScreen
+import com.oppshunter.app.features.auth.ui.RecoveryViewModel
+import com.oppshunter.app.features.auth.ui.RegisterScreen
+import com.oppshunter.app.features.auth.ui.ResetPasswordScreen
+import com.oppshunter.app.features.auth.ui.VerifyEmailScreen
+import com.oppshunter.app.features.auth.ui.WelcomeScreen
+import com.oppshunter.app.features.dashboard.DashboardScreen
+import com.oppshunter.app.features.onboarding.OnboardingPrefs
+import com.oppshunter.app.features.onboarding.OnboardingScreen
+import com.oppshunter.app.features.onboarding.SplashScreen
+import com.oppshunter.app.features.settings.SettingsScreen
+import com.oppshunter.app.ui.components.ComingSoonScreen
+import com.oppshunter.app.ui.components.MainTab
 
-object Routes {
-    const val SPLASH = "splash"
-    const val ONBOARDING = "onboarding"
-    const val WELCOME = "welcome"
-    const val LOGIN = "login"
-    const val REGISTER = "register"
-    const val FORGOT_PASSWORD = "forgot_password"
-    const val RESET_PASSWORD = "reset_password"
-    const val VERIFY_EMAIL = "verify_email"
-    const val PROFILE_SETUP = "profile_setup"
-    const val HOME = "home"
+private fun MainTab.route(): String = when (this) {
+    MainTab.HOME -> Routes.HOME
+    MainTab.APPLICATIONS -> Routes.APPLICATIONS
+    MainTab.SEARCH -> Routes.SEARCH
+    MainTab.ALERTS -> Routes.ALERTS
+    MainTab.SETTINGS -> Routes.SETTINGS
+}
+
+private fun NavHostController.navigateToTab(tab: MainTab) {
+    navigate(tab.route()) {
+        popUpTo(Routes.HOME) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
 }
 
 @Composable
@@ -50,6 +51,11 @@ fun AppNavigation() {
     val recoveryViewModel: RecoveryViewModel = viewModel()
     val context = LocalContext.current
     val onboardingPrefs = remember { OnboardingPrefs(context) }
+    val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) onboardingPrefs.hasAccount = true
+    }
 
     NavHost(
         navController = navController,
@@ -90,7 +96,12 @@ fun AppNavigation() {
                     }
                 },
                 onContinueWithEmail = {
-                    navController.navigate(Routes.LOGIN)
+                    val destination = if (onboardingPrefs.hasAccount) {
+                        Routes.LOGIN
+                    } else {
+                        Routes.REGISTER
+                    }
+                    navController.navigate(destination)
                 }
             )
         }
@@ -189,7 +200,35 @@ fun AppNavigation() {
         }
 
         composable(Routes.HOME) {
-            HomeScreenPlaceholder(
+            DashboardScreen(
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.APPLICATIONS) {
+            ComingSoonScreen(
+                tab = MainTab.APPLICATIONS,
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.SEARCH) {
+            ComingSoonScreen(
+                tab = MainTab.SEARCH,
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.ALERTS) {
+            ComingSoonScreen(
+                tab = MainTab.ALERTS,
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onTabSelected = { navController.navigateToTab(it) },
                 onLogout = {
                     authViewModel.logout()
                     navController.navigate(Routes.WELCOME) {
@@ -197,28 +236,6 @@ fun AppNavigation() {
                     }
                 }
             )
-        }
-    }
-}
-
-@Composable
-private fun HomeScreenPlaceholder(onLogout: () -> Unit) {
-    Scaffold { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "You're logged in!",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                TextButton(onClick = onLogout) {
-                    Text("Log out")
-                }
-            }
         }
     }
 }

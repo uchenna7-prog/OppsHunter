@@ -22,3 +22,5 @@ val DarkSurface = Color(0xFF111A2E)
 val DarkPrimary = Color(0xFF60A5FA)
 val DarkTextPrimary = Color(0xFFF1F5F9)
 val DarkTextSecondary = Color(0xFF94A3B8)
+
+val ScreenBackground = Color(0xFFF5F8FF)
