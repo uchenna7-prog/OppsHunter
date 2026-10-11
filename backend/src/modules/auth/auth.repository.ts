@@ -47,6 +47,7 @@ export interface AuthCodeRow {
   user_id: string;
   purpose: AuthCodePurpose;
   code_hash: Buffer;
+  attempts: number;
   expires_at: string;
   used_at: string | null;
 }
@@ -225,27 +226,45 @@ export async function createAuthCode(
     `INSERT INTO auth_codes (user_id, purpose, code_hash, expires_at)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (code_hash) DO UPDATE
-     SET expires_at = EXCLUDED.expires_at, used_at = NULL, created_at = now()
+     SET expires_at = EXCLUDED.expires_at,
+         used_at = NULL,
+         attempts = 0,
+         created_at = now()
      RETURNING *`,
     [userId, purpose, codeHash, expiresAt]
   );
   return result.rows[0]!;
 }
 
-export async function findValidAuthCode(
-  codeHash: Buffer,
-  purpose: AuthCodePurpose
+export async function consumeCodeAttempt(
+  userId: string,
+  purpose: AuthCodePurpose,
+  maxAttempts: number
 ): Promise<AuthCodeRow | null> {
   const result = await pool.query<AuthCodeRow>(
-    `SELECT * FROM auth_codes
-     WHERE code_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()`,
-    [codeHash, purpose]
+    `UPDATE auth_codes
+     SET attempts = attempts + 1
+     WHERE id = (
+       SELECT id FROM auth_codes
+       WHERE user_id = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     AND attempts < $3
+     AND used_at IS NULL
+     AND expires_at > now()
+     RETURNING *`,
+    [userId, purpose, maxAttempts]
   );
   return result.rows[0] ?? null;
 }
 
-export async function markAuthCodeUsed(codeId: string): Promise<void> {
-  await pool.query(`UPDATE auth_codes SET used_at = now() WHERE id = $1`, [codeId]);
+export async function markAuthCodeUsed(codeId: string): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE auth_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+    [codeId]
+  );
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function invalidateAuthCodesForUser(

@@ -1,9 +1,9 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { signAccessToken } from "../../lib/tokens.js";
 import { generateRawRefreshToken, hashRefreshToken } from "../../lib/refreshTokens.js";
 import { verifyGoogleIdToken } from "../../lib/googleAuth.js";
-import {sendEmail} from "../../lib/mailer.js";
+import { sendEmail } from "../../lib/mailer.js";
 import { UnauthorizedError, ConflictError, TooManyRequestsError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
 import {
@@ -23,7 +23,7 @@ import {
   createOauthIdentity,
   markEmailVerified,
   createAuthCode,
-  findValidAuthCode,
+  consumeCodeAttempt,
   markAuthCodeUsed,
   invalidateAuthCodesForUser,
   countRecentFailedLogins,
@@ -47,8 +47,9 @@ interface AuthResult {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 15 * 60 * 1000;
-const CODE_ATTEMPT_WINDOW_MINUTES = 15;
 const CODE_MAX_ATTEMPTS = 5;
+const CODE_LOCKOUT_WINDOW_MINUTES = 60;
+const CODE_LOCKOUT_MAX_LOCKS = 3;
 const FAILED_LOGIN_WINDOW_MINUTES = 15;
 const FAILED_LOGIN_LOCKOUT_THRESHOLD = 7;
 
@@ -58,6 +59,57 @@ function generateCode(): string {
 
 function hashCode(userId: string, purpose: AuthCodePurpose, code: string): Buffer {
   return createHash("sha256").update(`${userId}:${purpose}:${code}`).digest();
+}
+
+function codeIdentifier(purpose: AuthCodePurpose, userId: string): string {
+  return `${purpose}:${userId}`;
+}
+
+async function isCodeFlowLocked(userId: string, purpose: AuthCodePurpose): Promise<boolean> {
+  const locks = await countRecentAuthEvents(
+    codeIdentifier(purpose, userId),
+    "code_locked",
+    CODE_LOCKOUT_WINDOW_MINUTES
+  );
+  return locks >= CODE_LOCKOUT_MAX_LOCKS;
+}
+
+async function checkAuthCode(
+  userId: string,
+  purpose: AuthCodePurpose,
+  code: string,
+  failedEvent: string,
+  device: DeviceInfo
+): Promise<void> {
+  if (await isCodeFlowLocked(userId, purpose)) {
+    throw new TooManyRequestsError("Too many failed attempts. Try again in an hour.");
+  }
+
+  const row = await consumeCodeAttempt(userId, purpose, CODE_MAX_ATTEMPTS);
+
+  if (!row) {
+    throw new UnauthorizedError("Invalid or expired code");
+  }
+
+  const matches = timingSafeEqual(row.code_hash, hashCode(userId, purpose, code));
+
+  if (!matches) {
+    const identifier = codeIdentifier(purpose, userId);
+    await recordAuthEvent(userId, failedEvent, identifier, device.ip, device.userAgent);
+
+    if (row.attempts >= CODE_MAX_ATTEMPTS) {
+      await markAuthCodeUsed(row.id);
+      await recordAuthEvent(userId, "code_locked", identifier, device.ip, device.userAgent);
+      throw new TooManyRequestsError("Too many incorrect attempts. Request a new code.");
+    }
+
+    throw new UnauthorizedError("Invalid or expired code");
+  }
+
+  const claimed = await markAuthCodeUsed(row.id);
+  if (!claimed) {
+    throw new UnauthorizedError("Invalid or expired code");
+  }
 }
 
 async function issueSessionTokens(userId: string, device: DeviceInfo): Promise<AuthResult> {
@@ -236,6 +288,10 @@ export async function logoutAllOtherSessions(userId: string, currentSessionId: s
 }
 
 export async function requestEmailVerification(userId: string, email: string): Promise<void> {
+  if (await isCodeFlowLocked(userId, "email_verification")) {
+    throw new TooManyRequestsError("Too many failed attempts. Try again in an hour.");
+  }
+
   await invalidateAuthCodesForUser(userId, "email_verification");
 
   const code = generateCode();
@@ -255,28 +311,7 @@ export async function requestEmailVerification(userId: string, email: string): P
 }
 
 export async function verifyEmail(userId: string, code: string, device: DeviceInfo): Promise<void> {
-  const identifier = `verify:${userId}`;
-
-  const failures = await countRecentAuthEvents(
-    identifier,
-    "verify_email_failed",
-    CODE_ATTEMPT_WINDOW_MINUTES
-  );
-  if (failures >= CODE_MAX_ATTEMPTS) {
-    throw new TooManyRequestsError("Too many incorrect attempts. Try again in 15 minutes.");
-  }
-
-  const codeRow = await findValidAuthCode(
-    hashCode(userId, "email_verification", code),
-    "email_verification"
-  );
-
-  if (!codeRow) {
-    await recordAuthEvent(userId, "verify_email_failed", identifier, device.ip, device.userAgent);
-    throw new UnauthorizedError("Invalid or expired code");
-  }
-
-  await markAuthCodeUsed(codeRow.id);
+  await checkAuthCode(userId, "email_verification", code, "verify_email_failed", device);
   await markEmailVerified(userId);
 }
 
@@ -284,6 +319,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const user = await findUserByEmail(email);
 
   if (!user) return;
+
+  if (await isCodeFlowLocked(user.id, "password_reset")) return;
 
   await invalidateAuthCodesForUser(user.id, "password_reset");
 
@@ -308,34 +345,14 @@ export async function resetPassword(
   newPassword: string,
   device: DeviceInfo
 ): Promise<void> {
-  const identifier = `reset:${email}`;
-
-  const failures = await countRecentAuthEvents(
-    identifier,
-    "password_reset_failed",
-    CODE_ATTEMPT_WINDOW_MINUTES
-  );
-  if (failures >= CODE_MAX_ATTEMPTS) {
-    throw new TooManyRequestsError("Too many incorrect attempts. Try again in 15 minutes.");
-  }
-
   const user = await findUserByEmail(email);
-  const codeRow = user
-    ? await findValidAuthCode(hashCode(user.id, "password_reset", code), "password_reset")
-    : null;
 
-  if (!user || !codeRow) {
-    await recordAuthEvent(
-      user?.id ?? null,
-      "password_reset_failed",
-      identifier,
-      device.ip,
-      device.userAgent
-    );
+  if (!user) {
+    await recordAuthEvent(null, "password_reset_failed", `reset:${email}`, device.ip, device.userAgent);
     throw new UnauthorizedError("Invalid or expired code");
   }
 
-  await markAuthCodeUsed(codeRow.id);
+  await checkAuthCode(user.id, "password_reset", code, "password_reset_failed", device);
 
   const newHash = await hashPassword(newPassword);
   await updatePasswordHash(user.id, newHash);
