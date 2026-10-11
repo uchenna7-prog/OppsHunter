@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../auth/auth.middleware.js";
+import { authenticate } from "../../middleware/authenticate.js";
 import {
   registerDeviceTokenHandler,
   unregisterDeviceTokenHandler,

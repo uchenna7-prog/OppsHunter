@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.oppshunter.app.features.auth.data.AuthApi
 import com.oppshunter.app.features.auth.data.AuthRepository
 import com.oppshunter.app.features.auth.data.AuthResult
 import com.oppshunter.app.core.network.NetworkModule
@@ -21,7 +22,7 @@ data class AuthScreenState(
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val tokenStore = TokenStore(application)
-    private val api = NetworkModule.create(application)
+    private val api: AuthApi = NetworkModule.create(application)
     private val repository = AuthRepository(api, tokenStore)
 
     private val _state = MutableStateFlow(AuthScreenState())
