@@ -1,24 +1,27 @@
 import { Router } from "express";
-import type { Response, NextFunction } from "express";
-import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import type { Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
+import { TooManyRequestsError } from "../../lib/errors.js";
 import { authenticate } from "../auth/auth.middleware.js";
-import { z } from "zod";
-import { askAI } from "../../lib/ai/index.js";
+import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import { testPromptHandler } from "./ai.controller.js";
 
 export const aiRouter = Router();
 
+const rateLimitHandler = (_req: Request, _res: Response, next: NextFunction) => {
+  next(new TooManyRequestsError());
+};
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => (req as AuthenticatedRequest).userId ?? "anonymous",
+  handler: rateLimitHandler,
+});
+
 aiRouter.use(authenticate);
+aiRouter.use(aiLimiter);
 
-const testPromptSchema = z.object({
-  prompt: z.string().min(1).max(2000),
-});
-
-aiRouter.post("/test", async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const input = testPromptSchema.parse(req.body);
-    const response = await askAI(input.prompt);
-    res.status(200).json({ response });
-  } catch (err) {
-    next(err);
-  }
-});
+aiRouter.post("/test", testPromptHandler);

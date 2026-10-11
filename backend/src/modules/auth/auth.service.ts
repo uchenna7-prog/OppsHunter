@@ -3,7 +3,7 @@ import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { signAccessToken } from "../../lib/tokens.js";
 import { generateRawRefreshToken, hashRefreshToken } from "../../lib/refreshTokens.js";
 import { verifyGoogleIdToken } from "../../lib/googleAuth.js";
-import { sendEmail } from "../../lib/mailer/index.js";
+import {sendEmail} from "../../lib/mailer.js";
 import { UnauthorizedError, ConflictError, TooManyRequestsError } from "../../lib/errors.js";
 import { env } from "../../config/env.js";
 import {
@@ -22,15 +22,16 @@ import {
   findOauthIdentity,
   createOauthIdentity,
   markEmailVerified,
-  createAuthToken,
-  findValidAuthToken,
-  markAuthTokenUsed,
-  invalidateAuthTokensForUser,
+  createAuthCode,
+  findValidAuthCode,
+  markAuthCodeUsed,
+  invalidateAuthCodesForUser,
   countRecentFailedLogins,
   countRecentAuthEvents,
   markUserPendingDeletion,
   recordAuthEvent,
 } from "./auth.repository.js";
+import type { AuthCodePurpose } from "./auth.repository.js";
 
 interface DeviceInfo {
   deviceName: string | null;
@@ -44,8 +45,6 @@ interface AuthResult {
   refreshToken: string;
 }
 
-type CodePurpose = "email_verification" | "password_reset";
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 15 * 60 * 1000;
 const CODE_ATTEMPT_WINDOW_MINUTES = 15;
@@ -57,7 +56,7 @@ function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
-function hashCode(userId: string, purpose: CodePurpose, code: string): Buffer {
+function hashCode(userId: string, purpose: AuthCodePurpose, code: string): Buffer {
   return createHash("sha256").update(`${userId}:${purpose}:${code}`).digest();
 }
 
@@ -237,11 +236,11 @@ export async function logoutAllOtherSessions(userId: string, currentSessionId: s
 }
 
 export async function requestEmailVerification(userId: string, email: string): Promise<void> {
-  await invalidateAuthTokensForUser(userId, "email_verification");
+  await invalidateAuthCodesForUser(userId, "email_verification");
 
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
-  await createAuthToken(
+  await createAuthCode(
     userId,
     "email_verification",
     hashCode(userId, "email_verification", code),
@@ -267,17 +266,17 @@ export async function verifyEmail(userId: string, code: string, device: DeviceIn
     throw new TooManyRequestsError("Too many incorrect attempts. Try again in 15 minutes.");
   }
 
-  const tokenRow = await findValidAuthToken(
+  const codeRow = await findValidAuthCode(
     hashCode(userId, "email_verification", code),
     "email_verification"
   );
 
-  if (!tokenRow) {
+  if (!codeRow) {
     await recordAuthEvent(userId, "verify_email_failed", identifier, device.ip, device.userAgent);
     throw new UnauthorizedError("Invalid or expired code");
   }
 
-  await markAuthTokenUsed(tokenRow.id);
+  await markAuthCodeUsed(codeRow.id);
   await markEmailVerified(userId);
 }
 
@@ -286,17 +285,21 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
   if (!user) return;
 
-  await invalidateAuthTokensForUser(user.id, "password_reset");
+  await invalidateAuthCodesForUser(user.id, "password_reset");
 
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
-  await createAuthToken(user.id, "password_reset", hashCode(user.id, "password_reset", code), expiresAt);
+  await createAuthCode(user.id, "password_reset", hashCode(user.id, "password_reset", code), expiresAt);
 
-  await sendEmail(
-    email,
-    "Your OppsHunter password reset code",
-    `Your password reset code is ${code}\n\nIt expires in 15 minutes. If you didn't request this, ignore this email.`
-  );
+  try {
+    await sendEmail(
+      email,
+      "Your OppsHunter password reset code",
+      `Your password reset code is ${code}\n\nIt expires in 15 minutes. If you didn't request this, ignore this email.`
+    );
+  } catch (err) {
+    console.error("Password reset email failed:", err);
+  }
 }
 
 export async function resetPassword(
@@ -317,11 +320,11 @@ export async function resetPassword(
   }
 
   const user = await findUserByEmail(email);
-  const tokenRow = user
-    ? await findValidAuthToken(hashCode(user.id, "password_reset", code), "password_reset")
+  const codeRow = user
+    ? await findValidAuthCode(hashCode(user.id, "password_reset", code), "password_reset")
     : null;
 
-  if (!user || !tokenRow) {
+  if (!user || !codeRow) {
     await recordAuthEvent(
       user?.id ?? null,
       "password_reset_failed",
@@ -332,7 +335,7 @@ export async function resetPassword(
     throw new UnauthorizedError("Invalid or expired code");
   }
 
-  await markAuthTokenUsed(tokenRow.id);
+  await markAuthCodeUsed(codeRow.id);
 
   const newHash = await hashPassword(newPassword);
   await updatePasswordHash(user.id, newHash);

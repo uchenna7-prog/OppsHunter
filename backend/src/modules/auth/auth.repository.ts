@@ -1,5 +1,7 @@
 import { pool } from "../../db/pool.js";
 
+export type AuthCodePurpose = "email_verification" | "password_reset";
+
 export interface UserRow {
   id: string;
   email: string;
@@ -40,11 +42,11 @@ export interface OauthIdentityRow {
   created_at: string;
 }
 
-export interface AuthTokenRow {
+export interface AuthCodeRow {
   id: string;
   user_id: string;
-  purpose: "email_verification" | "password_reset";
-  token_hash: Buffer;
+  purpose: AuthCodePurpose;
+  code_hash: Buffer;
   expires_at: string;
   used_at: string | null;
 }
@@ -213,45 +215,45 @@ export async function markEmailVerified(userId: string): Promise<void> {
   );
 }
 
-export async function createAuthToken(
+export async function createAuthCode(
   userId: string,
-  purpose: "email_verification" | "password_reset",
-  tokenHash: Buffer,
+  purpose: AuthCodePurpose,
+  codeHash: Buffer,
   expiresAt: Date
-): Promise<AuthTokenRow> {
-  const result = await pool.query<AuthTokenRow>(
-    `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+): Promise<AuthCodeRow> {
+  const result = await pool.query<AuthCodeRow>(
+    `INSERT INTO auth_codes (user_id, purpose, code_hash, expires_at)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (token_hash) DO UPDATE
+     ON CONFLICT (code_hash) DO UPDATE
      SET expires_at = EXCLUDED.expires_at, used_at = NULL, created_at = now()
      RETURNING *`,
-    [userId, purpose, tokenHash, expiresAt]
+    [userId, purpose, codeHash, expiresAt]
   );
   return result.rows[0]!;
 }
 
-export async function findValidAuthToken(
-  tokenHash: Buffer,
-  purpose: "email_verification" | "password_reset"
-): Promise<AuthTokenRow | null> {
-  const result = await pool.query<AuthTokenRow>(
-    `SELECT * FROM auth_tokens
-     WHERE token_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()`,
-    [tokenHash, purpose]
+export async function findValidAuthCode(
+  codeHash: Buffer,
+  purpose: AuthCodePurpose
+): Promise<AuthCodeRow | null> {
+  const result = await pool.query<AuthCodeRow>(
+    `SELECT * FROM auth_codes
+     WHERE code_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()`,
+    [codeHash, purpose]
   );
   return result.rows[0] ?? null;
 }
 
-export async function markAuthTokenUsed(tokenId: string): Promise<void> {
-  await pool.query(`UPDATE auth_tokens SET used_at = now() WHERE id = $1`, [tokenId]);
+export async function markAuthCodeUsed(codeId: string): Promise<void> {
+  await pool.query(`UPDATE auth_codes SET used_at = now() WHERE id = $1`, [codeId]);
 }
 
-export async function invalidateAuthTokensForUser(
+export async function invalidateAuthCodesForUser(
   userId: string,
-  purpose: "email_verification" | "password_reset"
+  purpose: AuthCodePurpose
 ): Promise<void> {
   await pool.query(
-    `UPDATE auth_tokens SET used_at = now()
+    `UPDATE auth_codes SET used_at = now()
      WHERE user_id = $1 AND purpose = $2 AND used_at IS NULL`,
     [userId, purpose]
   );
@@ -336,14 +338,14 @@ export async function deleteUserDataAndAnonymize(userId: string): Promise<void> 
 
 export async function deleteExpiredAuthData(): Promise<{
   refreshTokens: number;
-  authTokens: number;
+  authCodes: number;
   sessions: number;
 }> {
   const refreshResult = await pool.query(
     `DELETE FROM refresh_tokens WHERE expires_at < now()`
   );
-  const authTokensResult = await pool.query(
-    `DELETE FROM auth_tokens WHERE expires_at < now()`
+  const authCodesResult = await pool.query(
+    `DELETE FROM auth_codes WHERE expires_at < now()`
   );
   const sessionsResult = await pool.query(
     `DELETE FROM sessions WHERE expires_at < now() OR (revoked_at IS NOT NULL AND revoked_at < now() - interval '7 days')`
@@ -351,7 +353,7 @@ export async function deleteExpiredAuthData(): Promise<{
 
   return {
     refreshTokens: refreshResult.rowCount ?? 0,
-    authTokens: authTokensResult.rowCount ?? 0,
+    authCodes: authCodesResult.rowCount ?? 0,
     sessions: sessionsResult.rowCount ?? 0,
   };
 }
