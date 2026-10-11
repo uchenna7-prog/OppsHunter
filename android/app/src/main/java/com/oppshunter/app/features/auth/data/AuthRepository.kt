@@ -14,6 +14,11 @@ sealed class ActionResult {
     data class Failure(val code: String, val message: String) : ActionResult()
 }
 
+sealed class ResetCodeResult {
+    data class Success(val resetToken: String) : ResetCodeResult()
+    data class Failure(val code: String, val message: String) : ResetCodeResult()
+}
+
 class AuthRepository(
     private val api: AuthApi,
     private val tokenStore: TokenStore
@@ -59,8 +64,24 @@ class AuthRepository(
         return callAction { api.requestPasswordReset(PasswordResetRequest(email)) }
     }
 
-    suspend fun resetPassword(email: String, code: String, newPassword: String): ActionResult {
-        return callAction { api.resetPassword(ResetPasswordRequest(email, code, newPassword)) }
+    suspend fun verifyResetCode(email: String, code: String): ResetCodeResult {
+        return try {
+            val response = api.verifyResetCode(VerifyResetCodeRequest(email, code))
+            val body = response.body()
+
+            if (response.isSuccessful && body != null) {
+                ResetCodeResult.Success(body.resetToken)
+            } else {
+                val failure = parseFailure(response.errorBody()?.string())
+                ResetCodeResult.Failure(failure.first, failure.second)
+            }
+        } catch (e: Exception) {
+            ResetCodeResult.Failure(code = "NETWORK_ERROR", message = "Couldn't reach the server")
+        }
+    }
+
+    suspend fun resetPassword(resetToken: String, newPassword: String): ActionResult {
+        return callAction { api.resetPassword(ResetPasswordRequest(resetToken, newPassword)) }
     }
 
     private suspend fun callAndStore(

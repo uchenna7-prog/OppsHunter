@@ -3,10 +3,11 @@ package com.oppshunter.app.features.auth.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.oppshunter.app.features.auth.data.ActionResult
-import com.oppshunter.app.features.auth.data.AuthRepository
 import com.oppshunter.app.core.network.NetworkModule
 import com.oppshunter.app.core.storage.TokenStore
+import com.oppshunter.app.features.auth.data.ActionResult
+import com.oppshunter.app.features.auth.data.AuthRepository
+import com.oppshunter.app.features.auth.data.ResetCodeResult
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ data class RecoveryState(
 
 sealed interface RecoveryEvent {
     object CodeSent : RecoveryEvent
+    object CodeVerified : RecoveryEvent
     object PasswordReset : RecoveryEvent
     object EmailVerified : RecoveryEvent
 }
@@ -36,6 +38,8 @@ class RecoveryViewModel(application: Application) : AndroidViewModel(application
         TokenStore(application)
     )
 
+    private var resetToken: String? = null
+
     private val _state = MutableStateFlow(RecoveryState())
     val state: StateFlow<RecoveryState> = _state.asStateFlow()
 
@@ -43,6 +47,7 @@ class RecoveryViewModel(application: Application) : AndroidViewModel(application
     val events: Flow<RecoveryEvent> = _events.receiveAsFlow()
 
     fun clear() {
+        resetToken = null
         _state.value = RecoveryState()
     }
 
@@ -51,6 +56,7 @@ class RecoveryViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startVerification(email: String) {
+        resetToken = null
         _state.value = RecoveryState(email = email)
         sendVerificationCode()
     }
@@ -120,14 +126,43 @@ class RecoveryViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun resetPassword(code: String, newPassword: String) {
+    fun verifyResetCode(code: String) {
         if (_state.value.isSubmitting) return
         val email = _state.value.email
         _state.value = _state.value.copy(isSubmitting = true, errorMessage = null)
 
         viewModelScope.launch {
-            when (val result = repository.resetPassword(email, code, newPassword)) {
+            when (val result = repository.verifyResetCode(email, code)) {
+                is ResetCodeResult.Success -> {
+                    resetToken = result.resetToken
+                    _state.value = _state.value.copy(isSubmitting = false)
+                    _events.send(RecoveryEvent.CodeVerified)
+                }
+                is ResetCodeResult.Failure -> _state.value = _state.value.copy(
+                    isSubmitting = false,
+                    errorMessage = result.message
+                )
+            }
+        }
+    }
+
+    fun resetPassword(newPassword: String) {
+        if (_state.value.isSubmitting) return
+
+        val token = resetToken
+        if (token == null) {
+            _state.value = _state.value.copy(
+                errorMessage = "Reset session expired. Request a new code."
+            )
+            return
+        }
+
+        _state.value = _state.value.copy(isSubmitting = true, errorMessage = null)
+
+        viewModelScope.launch {
+            when (val result = repository.resetPassword(token, newPassword)) {
                 is ActionResult.Success -> {
+                    resetToken = null
                     _state.value = _state.value.copy(isSubmitting = false)
                     _events.send(RecoveryEvent.PasswordReset)
                 }

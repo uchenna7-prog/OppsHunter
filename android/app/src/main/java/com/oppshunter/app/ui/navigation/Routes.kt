@@ -7,6 +7,7 @@ object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val FORGOT_PASSWORD = "forgot_password"
+    const val RESET_CODE = "reset_code"
     const val RESET_PASSWORD = "reset_password"
     const val VERIFY_EMAIL = "verify_email"
     const val PROFILE_SETUP = "profile_setup"

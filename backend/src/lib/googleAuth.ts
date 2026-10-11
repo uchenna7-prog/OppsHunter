@@ -11,6 +11,8 @@ export interface GoogleUserInfo {
   googleUserId: string;
   email: string;
   emailVerified: boolean;
+  name: string | null;
+  pictureUrl: string | null;
 }
 
 export async function verifyGoogleIdToken(idToken: string): Promise<GoogleUserInfo> {
@@ -37,5 +39,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleUserIn
     googleUserId: payload.sub as string,
     email,
     emailVerified: emailVerified ?? false,
+    name: typeof payload.name === "string" ? payload.name : null,
+    pictureUrl: typeof payload.picture === "string" ? payload.picture : null,
   };
 }

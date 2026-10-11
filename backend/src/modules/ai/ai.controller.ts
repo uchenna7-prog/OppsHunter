@@ -1,5 +1,5 @@
 import type { Response, NextFunction } from "express";
-import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import type { AuthenticatedRequest } from "../../middleware/authenticate.js";
 import { testPromptSchema } from "./ai.schemas.js";
 import * as aiService from "./ai.service.js";
 

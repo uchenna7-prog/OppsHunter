@@ -40,9 +40,13 @@ export const requestPasswordResetSchema = z.object({
   email: emailRule,
 });
 
-export const resetPasswordSchema = z.object({
+export const verifyResetCodeSchema = z.object({
   email: emailRule,
   code: codeRule,
+});
+
+export const resetPasswordSchema = z.object({
+  resetToken: z.string().min(1, "resetToken is required"),
   newPassword: passwordRule,
 });
 
@@ -52,4 +56,5 @@ export type RefreshInput = z.infer<typeof refreshSchema>;
 export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
+export type VerifyResetCodeInput = z.infer<typeof verifyResetCodeSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

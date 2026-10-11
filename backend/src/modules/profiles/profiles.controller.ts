@@ -1,11 +1,20 @@
 import type { Response, NextFunction } from "express";
-import type { AuthenticatedRequest } from "../auth/auth.middleware.js";
+import type { AuthenticatedRequest } from "../../middleware/authenticate.js";
+import { NotFoundError } from "../../lib/errors.js";
 import {
+  idSchema,
   updateProfileSchema,
-  addSkillSchema,
+  updatePreferencesSchema,
+  updatePrivateDetailsSchema,
+  setSkillsSchema,
+  setTargetRolesSchema,
+  setPreferredLocationsSchema,
+  setLanguagesSchema,
   setOpportunityTypePreferencesSchema,
-  addCertificationSchema,
+  SECTION_SCHEMAS,
 } from "./profiles.schemas.js";
+import { isSectionName } from "./profiles.repository.js";
+import type { Row, SectionName } from "./profiles.repository.js";
 import * as profilesService from "./profiles.service.js";
 
 function paramToString(value: string | string[] | undefined): string {
@@ -16,14 +25,19 @@ function paramToString(value: string | string[] | undefined): string {
   return result;
 }
 
+function sectionFromParams(req: AuthenticatedRequest): SectionName {
+  const value = paramToString(req.params.section);
+  if (!isSectionName(value)) throw new NotFoundError("Unknown profile section");
+  return value;
+}
+
 export async function getMyProfileHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
-    const data = await profilesService.getFullProfile(req.userId!);
-    res.status(200).json(data);
+    res.status(200).json(await profilesService.getFullProfile(req.userId!));
   } catch (err) {
     next(err);
   }
@@ -36,44 +50,45 @@ export async function updateMyProfileHandler(
 ) {
   try {
     const input = updateProfileSchema.parse(req.body);
-    const profile = await profilesService.updateMyProfile(req.userId!, {
-      education_level: input.educationLevel,
-      field_of_study: input.fieldOfStudy,
-      location: input.location,
-      years_of_experience: input.yearsOfExperience,
-      interests: input.interests,
-      career_goals: input.careerGoals,
-      remote_preference: input.remotePreference,
-    });
-    res.status(200).json(profile);
+    res.status(200).json(await profilesService.updateMyProfile(req.userId!, input));
   } catch (err) {
     next(err);
   }
 }
 
-export async function addSkillHandler(
+export async function updateMyPreferencesHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
-    const input = addSkillSchema.parse(req.body);
-    const result = await profilesService.addSkill(req.userId!, input.name, input.category);
-    res.status(201).json(result);
+    const input = updatePreferencesSchema.parse(req.body);
+    res.status(200).json(await profilesService.updateMyPreferences(req.userId!, input));
   } catch (err) {
     next(err);
   }
 }
 
-export async function removeSkillHandler(
+export async function getMyPrivateDetailsHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
-    const skillId = paramToString(req.params.skillId);
-    await profilesService.removeSkill(req.userId!, skillId);
-    res.status(204).send();
+    res.status(200).json(await profilesService.getMyPrivateDetails(req.userId!));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateMyPrivateDetailsHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const input = updatePrivateDetailsSchema.parse(req.body);
+    res.status(200).json(await profilesService.updateMyPrivateDetails(req.userId!, input));
   } catch (err) {
     next(err);
   }
@@ -86,8 +101,59 @@ export async function searchSkillsHandler(
 ) {
   try {
     const query = typeof req.query.q === "string" ? req.query.q : "";
-    const skills = await profilesService.searchAvailableSkills(query);
-    res.status(200).json(skills);
+    res.status(200).json(await profilesService.searchAvailableSkills(query));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setMySkillsHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const input = setSkillsSchema.parse(req.body);
+    res.status(200).json(await profilesService.setMySkills(req.userId!, input));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setMyTargetRolesHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const input = setTargetRolesSchema.parse(req.body);
+    res.status(200).json(await profilesService.setMyTargetRoles(req.userId!, input));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setMyPreferredLocationsHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const input = setPreferredLocationsSchema.parse(req.body);
+    res.status(200).json(await profilesService.setMyPreferredLocations(req.userId!, input));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setMyLanguagesHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const input = setLanguagesSchema.parse(req.body);
+    res.status(200).json(await profilesService.setMyLanguages(req.userId!, input));
   } catch (err) {
     next(err);
   }
@@ -99,8 +165,7 @@ export async function getOpportunityTypesHandler(
   next: NextFunction
 ) {
   try {
-    const types = await profilesService.getOpportunityTypeOptions();
-    res.status(200).json(types);
+    res.status(200).json(await profilesService.getOpportunityTypeOptions());
   } catch (err) {
     next(err);
   }
@@ -113,43 +178,52 @@ export async function setOpportunityTypePreferencesHandler(
 ) {
   try {
     const input = setOpportunityTypePreferencesSchema.parse(req.body);
-    const result = await profilesService.setMyOpportunityTypePreferences(
-      req.userId!,
-      input.opportunityTypeIds
-    );
-    res.status(200).json(result);
+    res
+      .status(200)
+      .json(await profilesService.setMyOpportunityTypePreferences(req.userId!, input.opportunityTypeIds));
   } catch (err) {
     next(err);
   }
 }
 
-export async function addCertificationHandler(
+export async function createItemHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
-    const input = addCertificationSchema.parse(req.body);
-    const result = await profilesService.addMyCertification(
-      req.userId!,
-      input.name,
-      input.issuer ?? null,
-      input.issuedDate ?? null
-    );
-    res.status(201).json(result);
+    const section = sectionFromParams(req);
+    const input = SECTION_SCHEMAS[section].create.parse(req.body) as Row;
+    res.status(201).json(await profilesService.createMyItem(req.userId!, section, input));
   } catch (err) {
     next(err);
   }
 }
 
-export async function removeCertificationHandler(
+export async function updateItemHandler(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
   try {
-    const certificationId = paramToString(req.params.certificationId);
-    await profilesService.removeMyCertification(req.userId!, certificationId);
+    const section = sectionFromParams(req);
+    const itemId = idSchema.parse(paramToString(req.params.itemId));
+    const input = SECTION_SCHEMAS[section].update.parse(req.body) as Row;
+    res.status(200).json(await profilesService.updateMyItem(req.userId!, section, itemId, input));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteItemHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const section = sectionFromParams(req);
+    const itemId = idSchema.parse(paramToString(req.params.itemId));
+    await profilesService.deleteMyItem(req.userId!, section, itemId);
     res.status(204).send();
   } catch (err) {
     next(err);

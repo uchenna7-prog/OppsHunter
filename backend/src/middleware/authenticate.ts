@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { verifyAccessToken } from "../../lib/tokens.js";
-import { UnauthorizedError } from "../../lib/errors.js";
+import { verifyAccessToken } from "../lib/tokens.js";
+import { UnauthorizedError } from "../lib/errors.js";
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -9,7 +9,7 @@ export interface AuthenticatedRequest extends Request {
 
 export async function authenticate(
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   try {

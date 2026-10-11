@@ -6,11 +6,12 @@ import {
   googleLoginSchema,
   verifyEmailSchema,
   requestPasswordResetSchema,
+  verifyResetCodeSchema,
   resetPasswordSchema,
 } from "./auth.schemas.js";
 import * as authService from "./auth.service.js";
 import { findUserById } from "./auth.repository.js";
-import type { AuthenticatedRequest } from "./auth.middleware.js";
+import type { AuthenticatedRequest } from "../../middleware/authenticate.js";
 
 function getDeviceInfo(req: Request, deviceName?: string) {
   return {
@@ -160,15 +161,24 @@ export async function requestPasswordResetHandler(req: Request, res: Response, n
   }
 }
 
+export async function verifyResetCodeHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = verifyResetCodeSchema.parse(req.body);
+    const resetToken = await authService.verifyPasswordResetCode(
+      input.email,
+      input.code,
+      getDeviceInfo(req)
+    );
+    res.status(200).json({ resetToken });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function resetPasswordHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const input = resetPasswordSchema.parse(req.body);
-    await authService.resetPassword(
-      input.email,
-      input.code,
-      input.newPassword,
-      getDeviceInfo(req)
-    );
+    await authService.resetPassword(input.resetToken, input.newPassword);
     res.status(200).json({ reset: true });
   } catch (err) {
     next(err);

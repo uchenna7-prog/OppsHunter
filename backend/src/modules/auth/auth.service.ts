@@ -1,4 +1,4 @@
-import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { signAccessToken } from "../../lib/tokens.js";
 import { generateRawRefreshToken, hashRefreshToken } from "../../lib/refreshTokens.js";
@@ -25,6 +25,7 @@ import {
   createAuthCode,
   consumeCodeAttempt,
   markAuthCodeUsed,
+  claimAuthCodeByHash,
   invalidateAuthCodesForUser,
   countRecentFailedLogins,
   countRecentAuthEvents,
@@ -32,6 +33,7 @@ import {
   recordAuthEvent,
 } from "./auth.repository.js";
 import type { AuthCodePurpose } from "./auth.repository.js";
+import { ensureProfile } from "../profiles/profiles.service.js";
 
 interface DeviceInfo {
   deviceName: string | null;
@@ -47,6 +49,7 @@ interface AuthResult {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_GRANT_TTL_MS = 10 * 60 * 1000;
 const CODE_MAX_ATTEMPTS = 5;
 const CODE_LOCKOUT_WINDOW_MINUTES = 60;
 const CODE_LOCKOUT_MAX_LOCKS = 3;
@@ -145,6 +148,7 @@ export async function register(
   }
 
   const user = await createUser(email);
+  await ensureProfile(user.id);
   const passwordHash = await hashPassword(password);
   await savePasswordCredential(user.id, passwordHash);
 
@@ -233,6 +237,11 @@ export async function loginWithGoogle(
   }
 
   const newUser = await createUser(googleUser.email);
+  
+  await ensureProfile(newUser.id, {
+    displayName: googleUser.name,
+    avatarUrl: googleUser.pictureUrl,
+  });
   await createOauthIdentity(newUser.id, "google", googleUser.googleUserId, googleUser.email);
 
   if (googleUser.emailVerified) {
@@ -323,6 +332,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   if (await isCodeFlowLocked(user.id, "password_reset")) return;
 
   await invalidateAuthCodesForUser(user.id, "password_reset");
+  await invalidateAuthCodesForUser(user.id, "password_reset_grant");
 
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
@@ -339,12 +349,11 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 }
 
-export async function resetPassword(
+export async function verifyPasswordResetCode(
   email: string,
   code: string,
-  newPassword: string,
   device: DeviceInfo
-): Promise<void> {
+): Promise<string> {
   const user = await findUserByEmail(email);
 
   if (!user) {
@@ -354,10 +363,32 @@ export async function resetPassword(
 
   await checkAuthCode(user.id, "password_reset", code, "password_reset_failed", device);
 
-  const newHash = await hashPassword(newPassword);
-  await updatePasswordHash(user.id, newHash);
+  await invalidateAuthCodesForUser(user.id, "password_reset_grant");
 
-  await revokeAllSessionsForUser(user.id, null, "password_reset");
+  const rawGrant = randomBytes(32).toString("base64url");
+  const grantHash = createHash("sha256").update(rawGrant).digest();
+  await createAuthCode(
+    user.id,
+    "password_reset_grant",
+    grantHash,
+    new Date(Date.now() + RESET_GRANT_TTL_MS)
+  );
+
+  return rawGrant;
+}
+
+export async function resetPassword(resetToken: string, newPassword: string): Promise<void> {
+  const grantHash = createHash("sha256").update(resetToken).digest();
+  const row = await claimAuthCodeByHash(grantHash, "password_reset_grant");
+
+  if (!row) {
+    throw new UnauthorizedError("Reset session expired. Request a new code.");
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await updatePasswordHash(row.user_id, newHash);
+
+  await revokeAllSessionsForUser(row.user_id, null, "password_reset");
 }
 
 export async function deleteAccount(userId: string): Promise<void> {

@@ -1,6 +1,7 @@
 package com.oppshunter.app.core.network
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import com.google.gson.Gson
 import com.oppshunter.app.core.storage.TokenStore
 import com.oppshunter.app.features.auth.data.AuthApi
@@ -11,39 +12,77 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object NetworkModule {
-    private const val BASE_URL = "https://oppshunter-api-6c1e97919369.herokuapp.com"
+    private const val BASE_URL = "http://localhost:3000/"
 
-    fun create(context: Context): AuthApi {
+    private val PUBLIC_PATHS = listOf(
+        "/auth/login",
+        "/auth/register",
+        "/auth/google",
+        "/auth/refresh",
+        "/auth/password-reset"
+    )
 
+    @Volatile
+    private var instance: Retrofit? = null
+
+    fun retrofit(context: Context): Retrofit {
+        return instance ?: synchronized(this) {
+            instance ?: build(context.applicationContext).also { instance = it }
+        }
+    }
+
+    inline fun <reified T> create(context: Context): T {
+        return retrofit(context).create(T::class.java)
+    }
+
+    private fun build(context: Context): Retrofit {
         val tokenStore = TokenStore(context)
+        val gson = Gson()
+
+        val refreshApi = Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(OkHttpClient.Builder().build())
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(AuthApi::class.java)
 
         val authInterceptor = Interceptor { chain ->
-            val originalRequest = chain.request()
+            val request = chain.request()
+            val path = request.url.encodedPath
             val accessToken = tokenStore.getAccessTokenBlocking()
 
-            val requestBuilder = originalRequest.newBuilder()
-            if (!accessToken.isNullOrBlank()) {
-                requestBuilder.addHeader("Authorization", "Bearer $accessToken")
+            if (PUBLIC_PATHS.any { path.startsWith(it) } || accessToken.isNullOrBlank()) {
+                chain.proceed(request)
+            } else {
+                chain.proceed(
+                    request.newBuilder()
+                        .header("Authorization", "Bearer $accessToken")
+                        .build()
+                )
             }
-
-            chain.proceed(requestBuilder.build())
         }
+
+        val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            redactHeader("Authorization")
+            level = if (isDebuggable) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
 
-        val okHttpClient = OkHttpClient.Builder()
+        val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .authenticator(TokenAuthenticator(tokenStore, refreshApi))
             .addInterceptor(loggingInterceptor)
             .build()
 
-        val retrofit = Retrofit.Builder()
+        return Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create(Gson()))
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
-
-        return retrofit.create(AuthApi::class.java)
     }
 }

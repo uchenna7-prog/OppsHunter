@@ -21,15 +21,18 @@ class TokenStore(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    private val _isLoggedIn = MutableStateFlow(hasTokens())
-    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+    val isLoggedIn: StateFlow<Boolean> = loggedInState.asStateFlow()
+
+    init {
+        loggedInState.value = getAccessTokenBlocking() != null
+    }
 
     fun saveTokens(accessToken: String, refreshToken: String) {
         prefs.edit()
             .putString(KEY_ACCESS_TOKEN, accessToken)
             .putString(KEY_REFRESH_TOKEN, refreshToken)
             .apply()
-        _isLoggedIn.value = true
+        loggedInState.value = true
     }
 
     fun getAccessTokenBlocking(): String? {
@@ -45,15 +48,12 @@ class TokenStore(context: Context) {
             .remove(KEY_ACCESS_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .apply()
-        _isLoggedIn.value = false
-    }
-
-    private fun hasTokens(): Boolean {
-        return getAccessTokenBlocking() != null
+        loggedInState.value = false
     }
 
     companion object {
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private val loggedInState = MutableStateFlow(false)
     }
 }

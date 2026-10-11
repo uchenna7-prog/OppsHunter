@@ -1,6 +1,6 @@
 import { pool } from "../../db/pool.js";
 
-export type AuthCodePurpose = "email_verification" | "password_reset";
+export type AuthCodePurpose = "email_verification" | "password_reset" | "password_reset_grant";
 
 export interface UserRow {
   id: string;
@@ -267,6 +267,19 @@ export async function markAuthCodeUsed(codeId: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function claimAuthCodeByHash(
+  codeHash: Buffer,
+  purpose: AuthCodePurpose
+): Promise<AuthCodeRow | null> {
+  const result = await pool.query<AuthCodeRow>(
+    `UPDATE auth_codes SET used_at = now()
+     WHERE code_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()
+     RETURNING *`,
+    [codeHash, purpose]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function invalidateAuthCodesForUser(
   userId: string,
   purpose: AuthCodePurpose
@@ -336,6 +349,7 @@ export async function deleteUserDataAndAnonymize(userId: string): Promise<void> 
     await client.query(`DELETE FROM password_credentials WHERE user_id = $1`, [userId]);
     await client.query(`DELETE FROM oauth_identities WHERE user_id = $1`, [userId]);
     await client.query(`DELETE FROM device_tokens WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM profiles WHERE user_id = $1`, [userId]);
 
     await client.query(
       `UPDATE users

@@ -9,7 +9,7 @@ export async function runExpiredTokenCleanup(): Promise<void> {
   const result = await deleteExpiredAuthData();
   console.log(
     `[cron] Expired auth data cleanup: ${result.refreshTokens} refresh tokens, ` +
-    `${result.authTokens} auth tokens, ${result.sessions} sessions removed`
+    `${result.authCodes} auth codes, ${result.sessions} sessions removed`
   );
 }
 

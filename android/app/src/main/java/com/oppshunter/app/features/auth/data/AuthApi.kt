@@ -30,6 +30,9 @@ interface AuthApi {
     @POST("auth/password-reset/request")
     suspend fun requestPasswordReset(@Body request: PasswordResetRequest): Response<Unit>
 
+    @POST("auth/password-reset/verify")
+    suspend fun verifyResetCode(@Body request: VerifyResetCodeRequest): Response<ResetTokenResponse>
+
     @POST("auth/password-reset")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<Unit>
 }

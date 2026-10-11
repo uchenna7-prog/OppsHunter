@@ -10,13 +10,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.oppshunter.app.features.auth.ui.AuthViewModel
 import com.oppshunter.app.features.auth.ui.ForgotPasswordScreen
 import com.oppshunter.app.features.auth.ui.LoginScreen
-import com.oppshunter.app.features.auth.ui.ProfileSetupScreen
 import com.oppshunter.app.features.auth.ui.RecoveryViewModel
 import com.oppshunter.app.features.auth.ui.RegisterScreen
+import com.oppshunter.app.features.auth.ui.ResetCodeScreen
 import com.oppshunter.app.features.auth.ui.ResetPasswordScreen
 import com.oppshunter.app.features.auth.ui.VerifyEmailScreen
 import com.oppshunter.app.features.auth.ui.WelcomeScreen
@@ -24,9 +25,19 @@ import com.oppshunter.app.features.dashboard.DashboardScreen
 import com.oppshunter.app.features.onboarding.OnboardingPrefs
 import com.oppshunter.app.features.onboarding.OnboardingScreen
 import com.oppshunter.app.features.onboarding.SplashScreen
+import com.oppshunter.app.features.profile.ui.ProfileSetupScreen
+import com.oppshunter.app.features.profile.ui.ProfileViewModel
 import com.oppshunter.app.features.settings.SettingsScreen
 import com.oppshunter.app.ui.components.ComingSoonScreen
 import com.oppshunter.app.ui.components.MainTab
+
+private val mainRoutes = setOf(
+    Routes.HOME,
+    Routes.APPLICATIONS,
+    Routes.SEARCH,
+    Routes.ALERTS,
+    Routes.SETTINGS
+)
 
 private fun MainTab.route(): String = when (this) {
     MainTab.HOME -> Routes.HOME
@@ -49,12 +60,29 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = viewModel()
     val recoveryViewModel: RecoveryViewModel = viewModel()
+    val profileViewModel: ProfileViewModel = viewModel()
     val context = LocalContext.current
     val onboardingPrefs = remember { OnboardingPrefs(context) }
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    val profileState by profileViewModel.state.collectAsState()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
 
     LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn) onboardingPrefs.hasAccount = true
+        if (isLoggedIn) {
+            onboardingPrefs.hasAccount = true
+            profileViewModel.load()
+        } else {
+            profileViewModel.clear()
+        }
+    }
+
+    LaunchedEffect(isLoggedIn, currentRoute) {
+        if (!isLoggedIn && currentRoute in mainRoutes) {
+            navController.navigate(Routes.WELCOME) {
+                popUpTo(Routes.HOME) { inclusive = true }
+            }
+        }
     }
 
     NavHost(
@@ -146,7 +174,7 @@ fun AppNavigation() {
             ForgotPasswordScreen(
                 viewModel = recoveryViewModel,
                 onCodeSent = {
-                    navController.navigate(Routes.RESET_PASSWORD)
+                    navController.navigate(Routes.RESET_CODE)
                 },
                 onBack = {
                     navController.popBackStack()
@@ -154,12 +182,23 @@ fun AppNavigation() {
             )
         }
 
-        composable(Routes.RESET_PASSWORD) {
-            ResetPasswordScreen(
+        composable(Routes.RESET_CODE) {
+            ResetCodeScreen(
                 viewModel = recoveryViewModel,
                 onBack = {
                     navController.popBackStack()
                 },
+                onVerified = {
+                    navController.navigate(Routes.RESET_PASSWORD) {
+                        popUpTo(Routes.RESET_CODE) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.RESET_PASSWORD) {
+            ResetPasswordScreen(
+                viewModel = recoveryViewModel,
                 onDone = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(Routes.WELCOME)
@@ -186,6 +225,7 @@ fun AppNavigation() {
 
         composable(Routes.PROFILE_SETUP) {
             ProfileSetupScreen(
+                viewModel = profileViewModel,
                 onNext = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.PROFILE_SETUP) { inclusive = true }
@@ -201,6 +241,7 @@ fun AppNavigation() {
 
         composable(Routes.HOME) {
             DashboardScreen(
+                userName = profileState.displayName?.substringBefore(' ').orEmpty(),
                 onTabSelected = { navController.navigateToTab(it) }
             )
         }

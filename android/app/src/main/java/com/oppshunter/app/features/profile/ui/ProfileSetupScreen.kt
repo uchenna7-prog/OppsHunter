@@ -1,4 +1,4 @@
-package com.oppshunter.app.features.auth.ui
+package com.oppshunter.app.features.profile.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,9 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.oppshunter.app.features.auth.ui.components.ErrorText
 import com.oppshunter.app.features.auth.ui.components.PrimaryButton
 import com.oppshunter.app.ui.theme.Border
 import com.oppshunter.app.ui.theme.InputFill
@@ -46,11 +50,27 @@ import com.oppshunter.app.ui.theme.TextSecondary
 
 @Composable
 fun ProfileSetupScreen(
-    onNext: (String) -> Unit,
+    viewModel: ProfileViewModel,
+    onNext: () -> Unit,
     onSkip: () -> Unit
 ) {
-    var nickname by remember { mutableStateOf("") }
+    val state by viewModel.state.collectAsState()
+    val currentOnNext by rememberUpdatedState(onNext)
+
+    var nickname by rememberSaveable { mutableStateOf("") }
     val initial = nickname.trim().firstOrNull()?.uppercase() ?: "U"
+
+    LaunchedEffect(Unit) {
+        viewModel.clearError()
+        viewModel.events.collect { event ->
+            if (event is ProfileEvent.Saved) currentOnNext()
+        }
+    }
+
+    LaunchedEffect(state.displayName) {
+        val loaded = state.displayName
+        if (nickname.isEmpty() && !loaded.isNullOrBlank()) nickname = loaded
+    }
 
     Column(
         modifier = Modifier
@@ -91,7 +111,7 @@ fun ProfileSetupScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Let recruiters and your agent know you better",
+            text = "Tell me what to call you",
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
@@ -100,9 +120,7 @@ fun ProfileSetupScreen(
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        Box(
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
+        Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
             Box(
                 modifier = Modifier
                     .size(112.dp)
@@ -139,7 +157,7 @@ fun ProfileSetupScreen(
             value = nickname,
             onValueChange = { if (it.length <= 30) nickname = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(text = "Your nickname", color = TextHint) },
+            placeholder = { Text(text = "Your name", color = TextHint) },
             singleLine = true,
             shape = RoundedCornerShape(20.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -165,17 +183,20 @@ fun ProfileSetupScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "You can change your nickname once every 7 days",
+            text = "You can change your name once every 7 days",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary
         )
+
+        ErrorText(message = state.errorMessage)
 
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
             text = "Next",
+            isLoading = state.isSaving,
             enabled = nickname.isNotBlank(),
-            onClick = { onNext(nickname.trim()) }
+            onClick = { viewModel.saveDisplayName(nickname.trim()) }
         )
 
         Spacer(modifier = Modifier.height(32.dp))

@@ -26,14 +26,6 @@ data class AuthResponse(
     val refreshToken: String
 )
 
-data class ApiErrorBody(
-    val error: ApiErrorDetail
-)
-
-data class ApiErrorDetail(
-    val code: String,
-    val message: String
-)
 data class VerifyEmailRequest(
     val code: String
 )
@@ -42,8 +34,25 @@ data class PasswordResetRequest(
     val email: String
 )
 
-data class ResetPasswordRequest(
+data class VerifyResetCodeRequest(
     val email: String,
-    val code: String,
+    val code: String
+)
+
+data class ResetTokenResponse(
+    val resetToken: String
+)
+
+data class ResetPasswordRequest(
+    val resetToken: String,
     val newPassword: String
+)
+
+data class ApiErrorBody(
+    val error: ApiErrorDetail
+)
+
+data class ApiErrorDetail(
+    val code: String,
+    val message: String
 )

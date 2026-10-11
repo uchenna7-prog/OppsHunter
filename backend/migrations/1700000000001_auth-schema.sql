@@ -9,7 +9,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TYPE user_status AS ENUM ('active', 'suspended', 'deleted');
+CREATE TYPE user_status AS ENUM ('active', 'suspended', 'deleted', 'pending_deletion');
 
 CREATE TABLE users (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,18 +63,21 @@ CREATE TABLE refresh_tokens (
 );
 CREATE INDEX refresh_tokens_session_idx ON refresh_tokens(session_id);
 
-CREATE TYPE auth_token_purpose AS ENUM ('email_verification', 'password_reset');
+CREATE TYPE auth_code_purpose AS ENUM (
+  'email_verification', 'password_reset', 'password_reset_grant'
+);
 
-CREATE TABLE auth_tokens (
+CREATE TABLE auth_codes (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  purpose    auth_token_purpose NOT NULL,
-  token_hash bytea NOT NULL UNIQUE,
+  purpose    auth_code_purpose NOT NULL,
+  code_hash  bytea NOT NULL UNIQUE,
+  attempts   integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL,
   used_at    timestamptz
 );
-CREATE INDEX auth_tokens_user_purpose_idx ON auth_tokens(user_id, purpose);
+CREATE INDEX auth_codes_user_purpose_idx ON auth_codes(user_id, purpose);
 
 CREATE TABLE auth_events (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -90,7 +93,18 @@ CREATE INDEX auth_events_type_time_idx ON auth_events(event_type, created_at DES
 CREATE INDEX auth_events_ip_time_idx ON auth_events(ip, created_at DESC);
 CREATE INDEX auth_events_identifier_time_idx ON auth_events(identifier, created_at DESC);
 
+CREATE TABLE device_tokens (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token        text NOT NULL UNIQUE,
+  platform     text NOT NULL DEFAULT 'android' CHECK (platform IN ('android', 'ios')),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX device_tokens_user_idx ON device_tokens(user_id);
+
 -- Down Migration
-DROP TABLE auth_events, auth_tokens, refresh_tokens, sessions, oauth_identities, password_credentials, users;
-DROP TYPE auth_token_purpose, user_status;
+DROP TABLE device_tokens, auth_events, auth_codes, refresh_tokens, sessions,
+           oauth_identities, password_credentials, users;
+DROP TYPE auth_code_purpose, user_status;
 DROP FUNCTION set_updated_at();

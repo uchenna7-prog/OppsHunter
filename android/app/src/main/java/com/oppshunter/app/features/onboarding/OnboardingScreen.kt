@@ -55,6 +55,7 @@ private data class OnboardingPage(
     val title: String,
     val body: String
 )
+
 private val pages = listOf(
     OnboardingPage(
         image = R.drawable.agent_wave,

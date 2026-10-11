@@ -1,7 +1,6 @@
 import { Router } from "express";
-import type { Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
-import { TooManyRequestsError } from "../../lib/errors.js";
+import { authenticate } from "../../middleware/authenticate.js";
+import { createRateLimiter } from "../../middleware/rateLimit.js";
 import {
   registerHandler,
   loginHandler,
@@ -13,64 +12,19 @@ import {
   requestEmailVerificationHandler,
   verifyEmailHandler,
   requestPasswordResetHandler,
+  verifyResetCodeHandler,
   resetPasswordHandler,
   deleteAccountHandler,
 } from "./auth.controller.js";
-import { authenticate } from "./auth.middleware.js";
 
 export const authRouter = Router();
 
-const rateLimitHandler = (_req: Request, _res: Response, next: NextFunction) => {
-  next(new TooManyRequestsError());
-};
-
-const registerLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
-
-const refreshLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
-
-const resetRequestLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
-
-const resetConfirmLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
-
-const verificationRequestLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 6,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
+const registerLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 5 });
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 10 });
+const refreshLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 30 });
+const resetRequestLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 5 });
+const resetConfirmLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 10 });
+const verificationRequestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, limit: 6 });
 
 authRouter.post("/register", registerLimiter, registerHandler);
 authRouter.post("/login", loginLimiter, loginHandler);
@@ -88,5 +42,6 @@ authRouter.post(
 );
 authRouter.post("/verify-email", authenticate, verifyEmailHandler);
 authRouter.post("/password-reset/request", resetRequestLimiter, requestPasswordResetHandler);
+authRouter.post("/password-reset/verify", resetConfirmLimiter, verifyResetCodeHandler);
 authRouter.post("/password-reset", resetConfirmLimiter, resetPasswordHandler);
 authRouter.delete("/me", authenticate, deleteAccountHandler);
