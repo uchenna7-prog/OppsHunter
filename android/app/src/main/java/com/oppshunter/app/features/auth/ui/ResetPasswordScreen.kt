@@ -82,7 +82,7 @@ fun ResetPasswordScreen(
                     password = it
                     formError = null
                 },
-                placeholder = "Letters & numbers, 8+ characters",
+                placeholder = "8+ letters and numbers",
                 isPassword = true
             )
 

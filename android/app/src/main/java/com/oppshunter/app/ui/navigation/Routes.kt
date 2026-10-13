@@ -12,8 +12,8 @@ object Routes {
     const val VERIFY_EMAIL = "verify_email"
     const val PROFILE_SETUP = "profile_setup"
     const val HOME = "home"
+    const val SAVED = "saved"
+    const val AGENT = "agent"
     const val APPLICATIONS = "applications"
-    const val SEARCH = "search"
-    const val ALERTS = "alerts"
-    const val SETTINGS = "settings"
+    const val PROFILE = "profile"
 }

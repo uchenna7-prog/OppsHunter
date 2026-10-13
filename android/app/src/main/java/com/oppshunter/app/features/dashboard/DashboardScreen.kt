@@ -16,17 +16,30 @@ import androidx.compose.ui.unit.dp
 import com.oppshunter.app.ui.components.MainScaffold
 import com.oppshunter.app.ui.components.MainTab
 
+private val ScreenPadding = 20.dp
+
 @Composable
 fun DashboardScreen(
-    userName: String = "",
     onTabSelected: (MainTab) -> Unit
 ) {
+    var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(OpportunityFilter.ALL) }
     var savedIds by remember { mutableStateOf(emptySet<String>()) }
 
-    val visible = remember(filter) {
-        DashboardSampleData.opportunities.filter { filter.type == null || it.type == filter.type }
+    val visible = remember(filter, query) {
+        val term = query.trim()
+
+        DashboardSampleData.opportunities.filter { opportunity ->
+            val matchesType = filter.type == null || opportunity.type == filter.type
+            val matchesQuery = term.isEmpty() ||
+                    opportunity.title.contains(term, ignoreCase = true) ||
+                    opportunity.organization.contains(term, ignoreCase = true)
+
+            matchesType && matchesQuery
+        }
     }
+
+    val horizontal = Modifier.padding(horizontal = ScreenPadding)
 
     MainScaffold(
         selected = MainTab.HOME,
@@ -36,34 +49,57 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                top = 16.dp,
-                bottom = 24.dp
-            ),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { DashboardHeader(userName = userName) }
-            item { AgentStatusPill(newMatches = 12) }
+            item {
+                DashboardHeader(
+                    onNotificationsClick = {},
+                    modifier = horizontal
+                )
+            }
+
+            item {
+                SearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    modifier = horizontal
+                )
+            }
+
             item {
                 FilterRow(
                     selected = filter,
                     onSelected = { filter = it }
                 )
             }
-            items(items = visible, key = { it.id }) { opportunity ->
-                OpportunityCard(
-                    opportunity = opportunity,
-                    saved = opportunity.id in savedIds,
-                    onToggleSaved = {
-                        savedIds = if (opportunity.id in savedIds) {
-                            savedIds - opportunity.id
-                        } else {
-                            savedIds + opportunity.id
-                        }
-                    }
+
+            item {
+                SectionHeader(
+                    title = "Recommended for you",
+                    count = visible.size,
+                    modifier = horizontal
                 )
+            }
+
+            if (visible.isEmpty()) {
+                item { EmptyState(modifier = horizontal) }
+            } else {
+                items(items = visible, key = { it.id }) { opportunity ->
+                    OpportunityCard(
+                        opportunity = opportunity,
+                        saved = opportunity.id in savedIds,
+                        onToggleSaved = {
+                            savedIds = if (opportunity.id in savedIds) {
+                                savedIds - opportunity.id
+                            } else {
+                                savedIds + opportunity.id
+                            }
+                        },
+                        onClick = {},
+                        modifier = horizontal
+                    )
+                }
             }
         }
     }

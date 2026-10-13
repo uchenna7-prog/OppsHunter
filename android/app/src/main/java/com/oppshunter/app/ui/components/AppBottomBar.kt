@@ -17,32 +17,34 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.oppshunter.app.ui.theme.Primary
-import com.oppshunter.app.ui.theme.TextHint
+import androidx.compose.ui.unit.sp
 
 enum class MainTab(
     val label: String,
@@ -50,10 +52,10 @@ enum class MainTab(
     val selectedIcon: ImageVector
 ) {
     HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
+    SAVED("Saved", Icons.Outlined.BookmarkBorder, Icons.Filled.Bookmark),
+    AGENT("Agent", Icons.Outlined.SmartToy, Icons.Filled.SmartToy),
     APPLICATIONS("Applied", Icons.Outlined.Description, Icons.Filled.Description),
-    SEARCH("Search", Icons.Filled.Search, Icons.Filled.Search),
-    ALERTS("Alerts", Icons.Outlined.Notifications, Icons.Filled.Notifications),
-    SETTINGS("Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+    PROFILE("Profile", Icons.Outlined.PersonOutline, Icons.Filled.Person)
 }
 
 @Composable
@@ -62,36 +64,37 @@ fun AppBottomBar(
     onTabSelected: (MainTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < 0.5f
+    val divider = if (dark) colors.outline.copy(alpha = 0.35f) else colors.outline
+
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.White,
-        shadowElevation = 12.dp
+        color = colors.surface
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .height(72.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BarItem(MainTab.HOME, selected == MainTab.HOME) { onTabSelected(MainTab.HOME) }
-            BarItem(MainTab.APPLICATIONS, selected == MainTab.APPLICATIONS) {
-                onTabSelected(MainTab.APPLICATIONS)
-            }
-
+        Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
-                    .weight(1.5f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                SearchButton(onClick = { onTabSelected(MainTab.SEARCH) })
-            }
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(divider)
+            )
 
-            BarItem(MainTab.ALERTS, selected == MainTab.ALERTS) { onTabSelected(MainTab.ALERTS) }
-            BarItem(MainTab.SETTINGS, selected == MainTab.SETTINGS) {
-                onTabSelected(MainTab.SETTINGS)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .height(64.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MainTab.values().forEach { tab ->
+                    BarItem(
+                        tab = tab,
+                        selected = tab == selected,
+                        onClick = { onTabSelected(tab) }
+                    )
+                }
             }
         }
     }
@@ -103,9 +106,12 @@ private fun RowScope.BarItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val tint by animateColorAsState(
-        targetValue = if (selected) Primary else TextHint,
-        label = "tabTint"
+    val colors = MaterialTheme.colorScheme
+    val isAgent = tab == MainTab.AGENT
+
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) colors.primary else colors.onSurfaceVariant,
+        label = "tabColor"
     )
 
     Column(
@@ -120,48 +126,47 @@ private fun RowScope.BarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = if (selected) tab.selectedIcon else tab.icon,
-            contentDescription = tab.label,
-            tint = tint,
-            modifier = Modifier.size(26.dp)
-        )
+        if (isAgent) {
+            Box(
+                modifier = Modifier
+                    .width(56.dp)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (selected) tab.selectedIcon else tab.icon,
+                    contentDescription = tab.label,
+                    tint = colors.onPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier.height(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (selected) tab.selectedIcon else tab.icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
-        Spacer(modifier = Modifier.height(5.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-        Box(
-            modifier = Modifier
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(if (selected) Primary else Color.Transparent)
-        )
-    }
-}
-
-@Composable
-private fun SearchButton(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-
-    Box(
-        modifier = Modifier
-            .width(76.dp)
-            .height(46.dp)
-            .shadow(
-                elevation = 8.dp,
-                shape = shape,
-                ambientColor = Primary,
-                spotColor = Primary
+            Text(
+                text = tab.label,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                ),
+                color = contentColor,
+                maxLines = 1
             )
-            .clip(shape)
-            .background(Primary)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
-            tint = Color.White,
-            modifier = Modifier.size(26.dp)
-        )
+        }
     }
 }

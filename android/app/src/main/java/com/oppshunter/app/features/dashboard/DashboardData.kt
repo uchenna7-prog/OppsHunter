@@ -23,9 +23,18 @@ data class Opportunity(
     val organization: String,
     val location: String,
     val type: OpportunityType,
-    val matchPercent: Int,
-    val deadline: String
-)
+    val daysLeft: Int
+) {
+    val isUrgent: Boolean
+        get() = daysLeft <= 3
+
+    val deadlineLabel: String
+        get() = when (daysLeft) {
+            0 -> "Closes today"
+            1 -> "1 day left"
+            else -> "$daysLeft days left"
+        }
+}
 
 object DashboardSampleData {
     val opportunities = listOf(
@@ -35,8 +44,7 @@ object DashboardSampleData {
             organization = "Northwind Labs",
             location = "Remote",
             type = OpportunityType.JOB,
-            matchPercent = 94,
-            deadline = "3 days left"
+            daysLeft = 3
         ),
         Opportunity(
             id = "2",
@@ -44,8 +52,7 @@ object DashboardSampleData {
             organization = "Helio Systems",
             location = "London, UK",
             type = OpportunityType.INTERNSHIP,
-            matchPercent = 91,
-            deadline = "5 days left"
+            daysLeft = 5
         ),
         Opportunity(
             id = "3",
@@ -53,8 +60,7 @@ object DashboardSampleData {
             organization = "Meridian Fund",
             location = "Global",
             type = OpportunityType.GRANT,
-            matchPercent = 88,
-            deadline = "12 days left"
+            daysLeft = 12
         ),
         Opportunity(
             id = "4",
@@ -62,8 +68,7 @@ object DashboardSampleData {
             organization = "Brightpath Foundation",
             location = "United Kingdom",
             type = OpportunityType.SCHOLARSHIP,
-            matchPercent = 85,
-            deadline = "20 days left"
+            daysLeft = 20
         ),
         Opportunity(
             id = "5",
@@ -71,8 +76,7 @@ object DashboardSampleData {
             organization = "Atlas Institute",
             location = "Berlin, DE",
             type = OpportunityType.FELLOWSHIP,
-            matchPercent = 82,
-            deadline = "9 days left"
+            daysLeft = 9
         ),
         Opportunity(
             id = "6",
@@ -80,8 +84,7 @@ object DashboardSampleData {
             organization = "Kite Analytics",
             location = "Remote",
             type = OpportunityType.JOB,
-            matchPercent = 80,
-            deadline = "7 days left"
+            daysLeft = 7
         )
     )
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
@@ -49,6 +50,9 @@ import com.oppshunter.app.ui.theme.Primary
 import com.oppshunter.app.ui.theme.TextPrimary
 import com.oppshunter.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+
+
+private val ButtonShape = RoundedCornerShape(10.dp)
 
 private data class OnboardingPage(
     @DrawableRes val image: Int,
@@ -85,7 +89,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
     val scope = rememberCoroutineScope()
     val isLast = pagerState.currentPage == pages.lastIndex
     val buttonWidth by animateDpAsState(
-        targetValue = if (isLast) 168.dp else 56.dp,
+        targetValue = if (isLast) 148.dp else 48.dp,
         label = "buttonWidth"
     )
 
@@ -109,7 +113,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(40.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -175,7 +179,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -214,8 +218,8 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                     },
                     modifier = Modifier
                         .width(buttonWidth)
-                        .height(56.dp),
-                    shape = CircleShape,
+                        .height(48.dp),
+                    shape = ButtonShape,
                     contentPadding = PaddingValues(0.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Primary,

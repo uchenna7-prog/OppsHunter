@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.oppshunter.app.ui.theme.GradientMid
@@ -59,6 +59,8 @@ import com.oppshunter.app.ui.theme.Primary
 import com.oppshunter.app.ui.theme.TextHint
 import com.oppshunter.app.ui.theme.TextPrimary
 import com.oppshunter.app.ui.theme.TextSecondary
+
+private val FieldShape = RoundedCornerShape(10.dp)
 
 @Composable
 fun AuthBackground(content: @Composable ColumnScope.() -> Unit) {
@@ -109,9 +111,16 @@ fun AuthTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(text = placeholder, color = TextHint) },
+            placeholder = {
+                Text(
+                    text = placeholder,
+                    color = TextHint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             singleLine = true,
-            shape = RoundedCornerShape(28.dp),
+            shape = FieldShape,
             visualTransformation = if (isPassword && !visible) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
@@ -159,7 +168,7 @@ fun PrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp),
-        shape = CircleShape,
+        shape = FieldShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Primary,
             contentColor = Color.White,

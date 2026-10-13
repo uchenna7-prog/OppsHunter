@@ -33,18 +33,18 @@ import com.oppshunter.app.ui.components.MainTab
 
 private val mainRoutes = setOf(
     Routes.HOME,
+    Routes.SAVED,
+    Routes.AGENT,
     Routes.APPLICATIONS,
-    Routes.SEARCH,
-    Routes.ALERTS,
-    Routes.SETTINGS
+    Routes.PROFILE
 )
 
 private fun MainTab.route(): String = when (this) {
     MainTab.HOME -> Routes.HOME
+    MainTab.SAVED -> Routes.SAVED
+    MainTab.AGENT -> Routes.AGENT
     MainTab.APPLICATIONS -> Routes.APPLICATIONS
-    MainTab.SEARCH -> Routes.SEARCH
-    MainTab.ALERTS -> Routes.ALERTS
-    MainTab.SETTINGS -> Routes.SETTINGS
+    MainTab.PROFILE -> Routes.PROFILE
 }
 
 private fun NavHostController.navigateToTab(tab: MainTab) {
@@ -241,7 +241,20 @@ fun AppNavigation() {
 
         composable(Routes.HOME) {
             DashboardScreen(
-                userName = profileState.displayName?.substringBefore(' ').orEmpty(),
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.SAVED) {
+            ComingSoonScreen(
+                tab = MainTab.SAVED,
+                onTabSelected = { navController.navigateToTab(it) }
+            )
+        }
+
+        composable(Routes.AGENT) {
+            ComingSoonScreen(
+                tab = MainTab.AGENT,
                 onTabSelected = { navController.navigateToTab(it) }
             )
         }
@@ -253,21 +266,7 @@ fun AppNavigation() {
             )
         }
 
-        composable(Routes.SEARCH) {
-            ComingSoonScreen(
-                tab = MainTab.SEARCH,
-                onTabSelected = { navController.navigateToTab(it) }
-            )
-        }
-
-        composable(Routes.ALERTS) {
-            ComingSoonScreen(
-                tab = MainTab.ALERTS,
-                onTabSelected = { navController.navigateToTab(it) }
-            )
-        }
-
-        composable(Routes.SETTINGS) {
+        composable(Routes.PROFILE) {
             SettingsScreen(
                 onTabSelected = { navController.navigateToTab(it) },
                 onLogout = {

@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +49,9 @@ import com.oppshunter.app.ui.theme.Primary
 import com.oppshunter.app.ui.theme.TextPrimary
 import com.oppshunter.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+
+private val ButtonShape = RoundedCornerShape(10.dp)
+private val LogoBadgeShape = RoundedCornerShape(6.dp)
 
 @Composable
 fun WelcomeScreen(
@@ -132,7 +135,7 @@ fun WelcomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = CircleShape,
+                shape = ButtonShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Primary,
                     contentColor = Color.White,
@@ -154,7 +157,7 @@ fun WelcomeScreen(
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .clip(CircleShape)
+                                .clip(LogoBadgeShape)
                                 .background(Color.White),
                             contentAlignment = Alignment.Center
                         ) {
@@ -181,7 +184,7 @@ fun WelcomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = CircleShape,
+                shape = ButtonShape,
                 border = BorderStroke(1.dp, Border),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = Color.White,

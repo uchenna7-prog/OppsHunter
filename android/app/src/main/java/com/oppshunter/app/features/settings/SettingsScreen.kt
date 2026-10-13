@@ -1,6 +1,7 @@
 package com.oppshunter.app.features.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,17 +33,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.oppshunter.app.ui.components.MainScaffold
 import com.oppshunter.app.ui.components.MainTab
-import com.oppshunter.app.ui.theme.Accent
-import com.oppshunter.app.ui.theme.Primary
-import com.oppshunter.app.ui.theme.PrimaryContainer
 import com.oppshunter.app.ui.theme.TextHint
-import com.oppshunter.app.ui.theme.TextPrimary
-import com.oppshunter.app.ui.theme.TextSecondary
+
+private val CardRadius = 12.dp
+private val IconBoxRadius = 10.dp
 
 private data class SettingsItem(
     val icon: ImageVector,
@@ -59,12 +59,22 @@ private val items = listOf(
 )
 
 @Composable
+private fun borderColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (colors.background.luminance() < 0.5f) colors.outline.copy(alpha = 0.35f) else colors.outline
+}
+
+@Composable
 fun SettingsScreen(
     onTabSelected: (MainTab) -> Unit,
     onLogout: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val border = borderColor()
+    val cardShape = RoundedCornerShape(CardRadius)
+
     MainScaffold(
-        selected = MainTab.SETTINGS,
+        selected = MainTab.PROFILE,
         onTabSelected = onTabSelected
     ) { padding ->
         LazyColumn(
@@ -82,23 +92,36 @@ fun SettingsScreen(
                 Text(
                     text = "Settings",
                     style = MaterialTheme.typography.displaySmall,
-                    color = TextPrimary
+                    color = colors.onBackground
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 AccountCard()
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             item {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White)
+                        .clip(cardShape)
+                        .background(colors.surface)
+                        .border(1.dp, border, cardShape)
                 ) {
-                    items.forEach { SettingsRow(it) }
+                    items.forEachIndexed { index, item ->
+                        SettingsRow(item)
+
+                        if (index != items.lastIndex) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 70.dp)
+                                    .height(1.dp)
+                                    .background(border)
+                            )
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             item {
@@ -106,12 +129,13 @@ fun SettingsScreen(
                     text = "Log out",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White)
+                        .clip(cardShape)
+                        .background(colors.surface)
+                        .border(1.dp, border, cardShape)
                         .clickable(onClick = onLogout)
-                        .padding(vertical = 18.dp),
+                        .padding(vertical = 16.dp),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.error,
+                    color = colors.error,
                     textAlign = TextAlign.Center
                 )
             }
@@ -121,11 +145,15 @@ fun SettingsScreen(
 
 @Composable
 private fun AccountCard() {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(CardRadius)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, borderColor(), shape)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -133,13 +161,13 @@ private fun AccountCard() {
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(Primary, Accent))),
+                .background(Brush.linearGradient(listOf(colors.primary, colors.secondary))),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "U",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
+                color = colors.onPrimary
             )
         }
 
@@ -149,12 +177,12 @@ private fun AccountCard() {
             Text(
                 text = "Your account",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary
+                color = colors.onSurface
             )
             Text(
                 text = "Manage your profile and preferences",
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
+                color = colors.onSurfaceVariant
             )
         }
     }
@@ -162,6 +190,8 @@ private fun AccountCard() {
 
 @Composable
 private fun SettingsRow(item: SettingsItem) {
+    val colors = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -172,14 +202,14 @@ private fun SettingsRow(item: SettingsItem) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(PrimaryContainer),
+                .clip(RoundedCornerShape(IconBoxRadius))
+                .background(colors.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = item.icon,
                 contentDescription = null,
-                tint = Primary,
+                tint = colors.onPrimaryContainer,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -190,12 +220,12 @@ private fun SettingsRow(item: SettingsItem) {
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary
+                color = colors.onSurface
             )
             Text(
                 text = item.subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
+                color = colors.onSurfaceVariant
             )
         }
 

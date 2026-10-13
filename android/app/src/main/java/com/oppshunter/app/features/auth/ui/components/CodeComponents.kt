@@ -36,6 +36,8 @@ import com.oppshunter.app.ui.theme.TextPrimary
 import com.oppshunter.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 
+private val CodeFieldShape = RoundedCornerShape(10.dp)
+
 @Composable
 fun CodeTextField(
     label: String,
@@ -71,7 +73,7 @@ fun CodeTextField(
                 )
             },
             singleLine = true,
-            shape = RoundedCornerShape(28.dp),
+            shape = CodeFieldShape,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done

@@ -12,7 +12,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object NetworkModule {
-    private const val BASE_URL = "http://localhost:3000/"
+    private const val BASE_URL = "https://oppshunter-api-6c1e97919369.herokuapp.com/"
 
     private val PUBLIC_PATHS = listOf(
         "/auth/login",
